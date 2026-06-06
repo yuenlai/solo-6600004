@@ -1,0 +1,49 @@
+from sqlalchemy import Column, String, Text, DateTime, Boolean, JSON, Enum as SAEnum
+from sqlalchemy.sql import func
+from ..core.database import Base
+import enum
+
+class Priority(str, enum.Enum):
+    low = "low"; medium = "medium"; high = "high"
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+    id = Column(String, primary_key=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    priority = Column(String(10), default="medium")
+    category = Column(String(100), default="工作")
+    completed = Column(Boolean, default=False)
+    recurring = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class Habit(Base):
+    __tablename__ = "habits"
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)
+    icon = Column(String(10), default="🎯")
+    color = Column(String(20), default="#4caf50")
+    target = Column(String(10), default="1")
+    unit = Column(String(20), default="次")
+    current_streak = Column(String(10), default="0")
+    reminder = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class HabitRecord(Base):
+    __tablename__ = "habit_records"
+    id = Column(String, primary_key=True)
+    habit_id = Column(String, nullable=False)
+    date = Column(String(10), nullable=False)
+    value = Column(String(10), default="1")
+    completed = Column(Boolean, default=False)
+
+class FocusSession(Base):
+    __tablename__ = "focus_sessions"
+    id = Column(String, primary_key=True)
+    duration = Column(String(10), nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    schedule_id = Column(String, nullable=True)
+    completed = Column(Boolean, default=False)
