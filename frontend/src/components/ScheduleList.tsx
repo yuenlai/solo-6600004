@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useScheduleStore } from '../store/schedule';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
-import { Schedule, RescheduleMode } from '../types';
+import { Schedule } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];

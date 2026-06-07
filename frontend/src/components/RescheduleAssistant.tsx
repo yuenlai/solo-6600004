@@ -23,7 +23,7 @@ export const RescheduleAssistant: React.FC<RescheduleAssistantProps> = ({
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { updateSchedule, addSchedule, schedules } = useScheduleStore();
+  const { updateSchedule, addSchedule } = useScheduleStore();
 
   const formatTime = (iso: string) => {
     const date = new Date(iso);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { scheduleApi } from '../services/api';
 import { useScheduleStore } from '../store/schedule';
-import { Schedule, ConflictInfo, RescheduleMode } from '../types';
+import { Schedule, ConflictInfo } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
 
 interface NaturalLanguageInputProps {
