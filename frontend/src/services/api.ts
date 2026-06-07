@@ -5,6 +5,7 @@ export const scheduleApi = {
   create: (data: any) => api.post('/schedules', data),
   update: (id: string, data: any) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
+  batchParse: (text: string, date?: string) => api.post('/schedules/batch-parse', { text, date }),
 };
 export const habitApi = {
   list: () => api.get('/habits'),

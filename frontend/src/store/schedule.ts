@@ -7,6 +7,7 @@ interface ScheduleState {
   focusSession: FocusSession | null;
   selectedDate: string;
   addSchedule: (s: Schedule) => void;
+  addSchedules: (s: Schedule[]) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
   deleteSchedule: (id: string) => void;
   toggleComplete: (id: string) => void;
@@ -15,12 +16,15 @@ interface ScheduleState {
   startFocus: (duration: number, scheduleId?: string) => void;
   endFocus: () => void;
   setSelectedDate: (date: string) => void;
+  setSchedules: (schedules: Schedule[]) => void;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: [], habits: [], focusSession: null,
   selectedDate: new Date().toISOString().split('T')[0],
   addSchedule: (s) => set({ schedules: [...get().schedules, s] }),
+  addSchedules: (newSchedules) => set({ schedules: [...get().schedules, ...newSchedules] }),
+  setSchedules: (schedules) => set({ schedules }),
   updateSchedule: (id, updates) => set({
     schedules: get().schedules.map(s => s.id === id ? { ...s, ...updates } : s)
   }),
