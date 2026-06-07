@@ -221,4 +221,33 @@ export const shareApi = {
   getByToken: (token: string) => api.get(`/schedule-shares/token/${token}`),
 };
 
+export const fragmentTimeApi = {
+  listMicroTasks: () => api.get('/fragment-time/micro-tasks'),
+  createMicroTask: (data: any) => api.post('/fragment-time/micro-tasks', data),
+  updateMicroTask: (id: string, data: any) => api.put(`/fragment-time/micro-tasks/${id}`, data),
+  deleteMicroTask: (id: string) => api.delete(`/fragment-time/micro-tasks/${id}`),
+  getRecommendations: (data: {
+    date?: string;
+    maxDuration?: number;
+    minDuration?: number;
+    maxRecommendations?: number;
+  }) => api.post('/fragment-time/recommendations', {
+    date: data.date,
+    max_duration: data.maxDuration || 60,
+    min_duration: data.minDuration || 5,
+    max_recommendations: data.maxRecommendations || 5,
+  }),
+  confirmTask: (data: {
+    microTaskId: string;
+    startTime: string;
+    endTime: string;
+    date: string;
+  }) => api.post('/fragment-time/confirm', {
+    micro_task_id: data.microTaskId,
+    start_time: data.startTime,
+    end_time: data.endTime,
+    date: data.date,
+  }),
+};
+
 export default api;

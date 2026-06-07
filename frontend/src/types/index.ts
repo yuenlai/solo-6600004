@@ -342,3 +342,31 @@ export interface MultiDayViewData {
   daySummaries: DaySummary[];
   allConflicts: { schedule: Schedule; conflictInfo: ConflictInfo }[];
 }
+
+export interface MicroTask {
+  id: string;
+  title: string;
+  description: string;
+  durationMinutes: number;
+  category: string;
+  icon: string;
+  priority: 'low' | 'medium' | 'high';
+  isHabit: boolean;
+  habitId?: string;
+  color: string;
+}
+
+export interface FragmentTimeSlot {
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  beforeSchedule?: Schedule;
+  afterSchedule?: Schedule;
+}
+
+export interface FragmentRecommendation {
+  slot: FragmentTimeSlot;
+  suggestions: MicroTask[];
+  reason: string;
+}

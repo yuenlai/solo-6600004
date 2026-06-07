@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel } from '../types';
-import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation } from '../types';
+import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi, fragmentTimeApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
@@ -27,6 +27,9 @@ interface ScheduleState {
   exceptionDays: ExceptionDay[];
   currentExceptionDay: ExceptionDayWithDetails | null;
   checkedExceptionDay: ExceptionDay | null;
+  microTasks: MicroTask[];
+  fragmentRecommendations: FragmentRecommendation[];
+  fragmentRecommendationsLoading: boolean;
   loadMonthlyGoals: (month?: string) => Promise<void>;
   loadGoalDetails: (goalId: string) => Promise<void>;
   createMonthlyGoal: (data: { title: string; description?: string; month: string; category?: string; priority?: string }) => Promise<MonthlyGoal>;
@@ -146,6 +149,13 @@ interface ScheduleState {
   }) => Promise<void>;
   setMorningPlan: (plan: MorningPlan | null) => void;
   setEveningReview: (review: EveningReview | null) => void;
+  loadMicroTasks: () => Promise<void>;
+  createMicroTask: (data: Partial<MicroTask>) => Promise<MicroTask | null>;
+  updateMicroTask: (id: string, data: Partial<MicroTask>) => Promise<void>;
+  deleteMicroTask: (id: string) => Promise<void>;
+  loadFragmentRecommendations: (date?: string, maxDuration?: number, minDuration?: number) => Promise<void>;
+  confirmFragmentTask: (microTaskId: string, startTime: string, endTime: string, date: string) => Promise<Schedule | null>;
+  clearFragmentRecommendations: () => void;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -170,6 +180,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   outgoingShares: [],
   incomingShares: [],
   acceptedShares: [],
+  microTasks: [],
+  fragmentRecommendations: [],
+  fragmentRecommendationsLoading: false,
   setCurrentUser: (name) => {
     localStorage.setItem('currentUser', name);
     set({ currentUser: name });
@@ -1684,5 +1697,155 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     };
 
     set({ warningCenterData: data });
+  },
+  loadMicroTasks: async () => {
+    try {
+      const res = await fragmentTimeApi.listMicroTasks();
+      const tasks: MicroTask[] = res.data.tasks;
+      set({ microTasks: tasks });
+    } catch (e) {
+      console.error('Failed to load micro tasks:', e);
+    }
+  },
+  createMicroTask: async (data) => {
+    try {
+      const res = await fragmentTimeApi.createMicroTask({
+        title: data.title,
+        description: data.description,
+        duration_minutes: data.durationMinutes,
+        category: data.category,
+        icon: data.icon,
+        priority: data.priority,
+        is_habit: data.isHabit,
+        habit_id: data.habitId,
+        color: data.color,
+      });
+      const task: MicroTask = res.data;
+      set({ microTasks: [...get().microTasks, task] });
+      return task;
+    } catch (e) {
+      console.error('Failed to create micro task:', e);
+      return null;
+    }
+  },
+  updateMicroTask: async (id, data) => {
+    try {
+      const updateData: any = {};
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.durationMinutes !== undefined) updateData.duration_minutes = data.durationMinutes;
+      if (data.category !== undefined) updateData.category = data.category;
+      if (data.icon !== undefined) updateData.icon = data.icon;
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.isHabit !== undefined) updateData.is_habit = data.isHabit;
+      if (data.habitId !== undefined) updateData.habit_id = data.habitId;
+      if (data.color !== undefined) updateData.color = data.color;
+
+      await fragmentTimeApi.updateMicroTask(id, updateData);
+      set({
+        microTasks: get().microTasks.map(t => t.id === id ? { ...t, ...data } : t)
+      });
+    } catch (e) {
+      console.error('Failed to update micro task:', e);
+    }
+  },
+  deleteMicroTask: async (id) => {
+    try {
+      await fragmentTimeApi.deleteMicroTask(id);
+      set({
+        microTasks: get().microTasks.filter(t => t.id !== id)
+      });
+    } catch (e) {
+      console.error('Failed to delete micro task:', e);
+    }
+  },
+  loadFragmentRecommendations: async (date, maxDuration, minDuration) => {
+    set({ fragmentRecommendationsLoading: true });
+    try {
+      const targetDate = date || get().selectedDate;
+      const res = await fragmentTimeApi.getRecommendations({
+        date: targetDate,
+        maxDuration,
+        minDuration,
+      });
+
+      const recommendations: FragmentRecommendation[] = res.data.recommendations.map((r: any) => ({
+        slot: {
+          date: r.slot.date,
+          startTime: r.slot.start_time,
+          endTime: r.slot.end_time,
+          durationMinutes: r.slot.duration_minutes,
+          beforeSchedule: r.slot.before_schedule ? {
+            id: r.slot.before_schedule.id,
+            title: r.slot.before_schedule.title,
+            description: r.slot.before_schedule.description,
+            startTime: r.slot.before_schedule.start_time,
+            endTime: r.slot.before_schedule.end_time,
+            priority: r.slot.before_schedule.priority,
+            category: r.slot.before_schedule.category,
+            completed: r.slot.before_schedule.completed,
+          } : undefined,
+          afterSchedule: r.slot.after_schedule ? {
+            id: r.slot.after_schedule.id,
+            title: r.slot.after_schedule.title,
+            description: r.slot.after_schedule.description,
+            startTime: r.slot.after_schedule.start_time,
+            endTime: r.slot.after_schedule.end_time,
+            priority: r.slot.after_schedule.priority,
+            category: r.slot.after_schedule.category,
+            completed: r.slot.after_schedule.completed,
+          } : undefined,
+        },
+        suggestions: r.suggestions.map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          durationMinutes: s.durationMinutes,
+          category: s.category,
+          icon: s.icon,
+          priority: s.priority,
+          isHabit: s.isHabit,
+          habitId: s.habitId,
+          color: s.color,
+        })),
+        reason: r.reason,
+      }));
+
+      set({ fragmentRecommendations: recommendations });
+    } catch (e) {
+      console.error('Failed to load fragment recommendations:', e);
+    } finally {
+      set({ fragmentRecommendationsLoading: false });
+    }
+  },
+  confirmFragmentTask: async (microTaskId, startTime, endTime, date) => {
+    try {
+      const res = await fragmentTimeApi.confirmTask({
+        microTaskId,
+        startTime,
+        endTime,
+        date,
+      });
+
+      const schedule: Schedule = {
+        id: res.data.schedule.id,
+        title: res.data.schedule.title,
+        description: res.data.schedule.description,
+        startTime: res.data.schedule.start_time,
+        endTime: res.data.schedule.end_time,
+        priority: res.data.schedule.priority,
+        category: res.data.schedule.category,
+        completed: res.data.schedule.completed,
+      };
+
+      set({ schedules: [...get().schedules, schedule] });
+      return schedule;
+    } catch (e) {
+      console.error('Failed to confirm fragment task:', e);
+      return null;
+    }
+  },
+  clearFragmentRecommendations: () => {
+    set({ fragmentRecommendations: [] });
   },
 }));

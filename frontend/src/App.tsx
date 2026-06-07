@@ -12,6 +12,7 @@ import { MonthlyGoalProgress } from './components/MonthlyGoalProgress';
 import { ExceptionDayManager } from './components/ExceptionDayManager';
 import { ShareManager } from './components/ShareManager';
 import { WarningCenter } from './components/WarningCenter';
+import { FragmentTimeRecommendation } from './components/FragmentTimeRecommendation';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
@@ -27,6 +28,7 @@ const App: React.FC = () => {
   const [showExceptionDayManager, setShowExceptionDayManager] = useState(false);
   const [showShareManager, setShowShareManager] = useState(false);
   const [showWarningCenter, setShowWarningCenter] = useState(false);
+  const [showFragmentRecommendation, setShowFragmentRecommendation] = useState(false);
   const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays, incomingShares, loadIncomingShares, loadOutgoingShares, loadAcceptedShares, loadWarningCenter, warningCenterData, loadDailyActions } = useScheduleStore();
 
   useEffect(() => {
@@ -214,6 +216,10 @@ const App: React.FC = () => {
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
             }}>📋 周计划模板</button>
+            <button onClick={() => setShowFragmentRecommendation(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #4caf50',
+              background: '#e8f5e9', color: '#2e7d32', cursor: 'pointer'
+            }}>⏰ 碎片时间</button>
             <button onClick={() => setShowSmartInput(true)} style={{
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
@@ -258,6 +264,20 @@ const App: React.FC = () => {
           onNavigateToSchedule={(_scheduleId, _date) => { setTab('schedule'); }}
           onNavigateToHabits={() => { setTab('habits'); }}
           onNavigateToGoals={() => { setTab('goals'); }}
+        />
+      )}
+      {showFragmentRecommendation && (
+        <FragmentTimeRecommendation
+          onClose={() => setShowFragmentRecommendation(false)}
+          onScheduleAdded={() => {
+            if (viewMode === 'week') {
+              loadWeekSchedules(selectedDate);
+            } else if (viewMode === 'multiDay') {
+              loadMultiDaySchedules(selectedDate, multiDayCount);
+            } else {
+              loadSchedules(selectedDate);
+            }
+          }}
         />
       )}
     </div>

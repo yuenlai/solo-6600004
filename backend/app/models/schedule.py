@@ -163,3 +163,18 @@ class Schedule(Base):
     share_id = Column(String, nullable=True)
     shared_from = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class MicroTask(Base):
+    __tablename__ = "micro_tasks"
+    id = Column(String, primary_key=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    duration_minutes = Column(String(10), nullable=False)
+    category = Column(String(50), default="学习")
+    icon = Column(String(10), default="📌")
+    priority = Column(String(10), default="medium")
+    is_habit = Column(Boolean, default=False)
+    habit_id = Column(String, nullable=True)
+    color = Column(String(20), default="#4caf50")
+    created_at = Column(DateTime, server_default=func.now())
