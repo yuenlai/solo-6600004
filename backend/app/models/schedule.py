@@ -91,3 +91,42 @@ class EveningReview(Base):
     summary = Column(Text, default="")
     mood = Column(String(20), default="neutral")
     created_at = Column(DateTime, server_default=func.now())
+
+
+class MonthlyGoal(Base):
+    __tablename__ = "monthly_goals"
+    id = Column(String, primary_key=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    month = Column(String(7), nullable=False)
+    category = Column(String(50), default="工作")
+    priority = Column(String(10), default="medium")
+    status = Column(String(20), default="active")
+    progress = Column(String(10), default="0")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class WeeklyAction(Base):
+    __tablename__ = "weekly_actions"
+    id = Column(String, primary_key=True)
+    monthly_goal_id = Column(String, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    week_number = Column(String(2), nullable=False)
+    start_date = Column(String(10), nullable=False)
+    end_date = Column(String(10), nullable=False)
+    completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class DailyAction(Base):
+    __tablename__ = "daily_actions"
+    id = Column(String, primary_key=True)
+    weekly_action_id = Column(String, nullable=False)
+    monthly_goal_id = Column(String, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    date = Column(String(10), nullable=False)
+    schedule_id = Column(String, nullable=True)
+    completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())

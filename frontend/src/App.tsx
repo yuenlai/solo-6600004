@@ -7,18 +7,21 @@ import { NaturalLanguageInput } from './components/NaturalLanguageInput';
 import { WeekTemplateSelector } from './components/WeekTemplateSelector';
 import { MorningPlanner } from './components/MorningPlanner';
 import { EveningReview } from './components/EveningReview';
+import { MonthlyGoalPlanner } from './components/MonthlyGoalPlanner';
+import { MonthlyGoalProgress } from './components/MonthlyGoalProgress';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
 import { getWeekStartDate, addDays, formatDate } from './data/weekTemplates';
 
 const App: React.FC = () => {
-  const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
+  const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report' | 'goals'>('schedule');
   const [showSmartInput, setShowSmartInput] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showMorningPlanner, setShowMorningPlanner] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics } = useScheduleStore();
+  const [showGoalPlanner, setShowGoalPlanner] = useState(false);
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -83,7 +86,8 @@ const App: React.FC = () => {
         <h2 style={{ margin: '0 0 20px', padding: '0 16px', fontSize: '16px' }}>⏰ Smart Planner</h2>
         {[
           { key: 'schedule', label: '📅 日程' }, { key: 'habits', label: '🎯 习惯' },
-          { key: 'focus', label: '🍅 专注' }, { key: 'report', label: '📊 报表' }
+          { key: 'focus', label: '🍅 专注' }, { key: 'goals', label: '🎯 目标' },
+          { key: 'report', label: '📊 报表' }
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as any)} style={{
             padding: '12px 16px', border: 'none', textAlign: 'left', cursor: 'pointer',
@@ -112,6 +116,10 @@ const App: React.FC = () => {
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
             }}>✨ 智能录入</button>
+            <button onClick={() => setShowGoalPlanner(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #7b1fa2',
+              background: '#fff', color: '#7b1fa2', cursor: 'pointer'
+            }}>🎯 月度目标</button>
             <button onClick={() => setScheduleViewMode(scheduleViewMode === 'list' ? 'timeline' : 'list')} style={{
               padding: '8px 16px', borderRadius: '20px',
               border: scheduleViewMode === 'timeline' ? '1px solid #4caf50' : '1px solid #1a237e',
@@ -128,12 +136,18 @@ const App: React.FC = () => {
         {tab === 'schedule' && <ScheduleList />}
         {tab === 'habits' && <HabitTracker />}
         {tab === 'focus' && <PomodoroTimer />}
+        {tab === 'goals' && (
+          <div style={{ padding: '16px' }}>
+            <MonthlyGoalProgress onOpenPlanner={() => setShowGoalPlanner(true)} />
+          </div>
+        )}
         {tab === 'report' && <WeeklyChart />}
       </main>
       {showSmartInput && <NaturalLanguageInput onClose={() => setShowSmartInput(false)} />}
       {showTemplateSelector && <WeekTemplateSelector onClose={() => setShowTemplateSelector(false)} />}
       {showMorningPlanner && <MorningPlanner onClose={() => setShowMorningPlanner(false)} />}
       {showEveningReview && <EveningReview onClose={() => setShowEveningReview(false)} />}
+      {showGoalPlanner && <MonthlyGoalPlanner onClose={() => { setShowGoalPlanner(false); loadMonthlyGoals(); loadMonthProgress(selectedDate.slice(0, 7)); }} />}
     </div>
   );
 };

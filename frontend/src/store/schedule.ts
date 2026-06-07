@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo } from '../types';
-import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction } from '../types';
+import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
@@ -18,6 +18,26 @@ interface ScheduleState {
   eveningReview: EveningReview | null;
   completionStats: CompletionStats | null;
   conflicts: Map<string, ConflictInfo>;
+  monthlyGoals: MonthlyGoal[];
+  currentGoalDetails: MonthlyGoalWithDetails | null;
+  monthProgress: MonthlyGoalProgress[] | null;
+  dailyActions: (DailyAction & { goalTitle: string; goalCategory: string; weeklyTitle: string })[];
+  loadMonthlyGoals: (month?: string) => Promise<void>;
+  loadGoalDetails: (goalId: string) => Promise<void>;
+  createMonthlyGoal: (data: { title: string; description?: string; month: string; category?: string; priority?: string }) => Promise<MonthlyGoal>;
+  updateMonthlyGoal: (id: string, data: Partial<MonthlyGoal>) => Promise<void>;
+  deleteMonthlyGoal: (id: string) => Promise<void>;
+  getMonthWeeks: (month: string) => Promise<Array<{ week_number: number; start_date: string; end_date: string }>>;
+  createWeeklyAction: (data: { monthly_goal_id: string; title: string; description?: string; week_number: number; start_date: string; end_date: string }) => Promise<WeeklyAction>;
+  updateWeeklyAction: (id: string, data: { title?: string; description?: string; completed?: boolean }) => Promise<void>;
+  deleteWeeklyAction: (id: string) => Promise<void>;
+  createDailyAction: (data: { weekly_action_id: string; monthly_goal_id: string; title: string; description?: string; date: string }) => Promise<DailyAction>;
+  updateDailyAction: (id: string, data: { title?: string; description?: string; completed?: boolean; schedule_id?: string }) => Promise<void>;
+  deleteDailyAction: (id: string) => Promise<void>;
+  loadGoalProgress: (goalId: string) => Promise<MonthlyGoalProgress | null>;
+  loadMonthProgress: (month: string) => Promise<void>;
+  loadDailyActions: (date: string) => Promise<void>;
+  setCurrentGoalDetails: (goal: MonthlyGoalWithDetails | null) => void;
   addSchedule: (s: Schedule) => void;
   addSchedules: (s: Schedule[]) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
@@ -630,4 +650,278 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
   setMorningPlan: (plan) => set({ morningPlan: plan }),
   setEveningReview: (review) => set({ eveningReview: review }),
+  monthlyGoals: [],
+  currentGoalDetails: null,
+  monthProgress: null,
+  dailyActions: [],
+  loadMonthlyGoals: async (month) => {
+    set({ loading: true });
+    try {
+      const res = await monthlyGoalApi.list(month);
+      const goals: MonthlyGoal[] = res.data.map((g: any) => ({
+        id: g.id,
+        title: g.title,
+        description: g.description,
+        month: g.month,
+        category: g.category,
+        priority: g.priority,
+        status: g.status,
+        progress: parseFloat(g.progress) || 0,
+        createdAt: g.created_at
+      }));
+      set({ monthlyGoals: goals });
+    } catch (e) {
+      console.error('Failed to load monthly goals:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadGoalDetails: async (goalId) => {
+    set({ loading: true });
+    try {
+      const res = await monthlyGoalApi.get(goalId);
+      const data = res.data;
+      const goal: MonthlyGoalWithDetails = {
+        id: data.id,
+        title: data.title,
+        description: data.description,
+        month: data.month,
+        category: data.category,
+        priority: data.priority,
+        status: data.status,
+        progress: parseFloat(data.progress) || 0,
+        createdAt: data.created_at,
+        weeklyActions: (data.weekly_actions || []).map((wa: any) => ({
+          id: wa.id,
+          monthlyGoalId: wa.monthly_goal_id,
+          title: wa.title,
+          description: wa.description,
+          weekNumber: parseInt(wa.week_number),
+          startDate: wa.start_date,
+          endDate: wa.end_date,
+          completed: wa.completed,
+          createdAt: wa.created_at,
+          dailyActions: (wa.daily_actions || []).map((da: any) => ({
+            id: da.id,
+            weeklyActionId: da.weekly_action_id,
+            monthlyGoalId: da.monthly_goal_id,
+            title: da.title,
+            description: da.description,
+            date: da.date,
+            scheduleId: da.schedule_id,
+            completed: da.completed,
+            createdAt: da.created_at
+          }))
+        }))
+      };
+      set({ currentGoalDetails: goal });
+    } catch (e) {
+      console.error('Failed to load goal details:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  createMonthlyGoal: async (data) => {
+    try {
+      const res = await monthlyGoalApi.create(data);
+      const goal: MonthlyGoal = {
+        id: res.data.id,
+        title: res.data.title,
+        description: res.data.description,
+        month: res.data.month,
+        category: res.data.category,
+        priority: res.data.priority,
+        status: res.data.status,
+        progress: parseFloat(res.data.progress) || 0,
+        createdAt: res.data.created_at
+      };
+      set({ monthlyGoals: [goal, ...get().monthlyGoals] });
+      return goal;
+    } catch (e) {
+      console.error('Failed to create monthly goal:', e);
+      throw e;
+    }
+  },
+  updateMonthlyGoal: async (id, data) => {
+    try {
+      const updateData: any = {};
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.category !== undefined) updateData.category = data.category;
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.status !== undefined) updateData.status = data.status;
+      await monthlyGoalApi.update(id, updateData);
+      set({
+        monthlyGoals: get().monthlyGoals.map(g => g.id === id ? { ...g, ...data } : g)
+      });
+    } catch (e) {
+      console.error('Failed to update monthly goal:', e);
+      throw e;
+    }
+  },
+  deleteMonthlyGoal: async (id) => {
+    try {
+      await monthlyGoalApi.delete(id);
+      set({
+        monthlyGoals: get().monthlyGoals.filter(g => g.id !== id)
+      });
+    } catch (e) {
+      console.error('Failed to delete monthly goal:', e);
+      throw e;
+    }
+  },
+  getMonthWeeks: async (month) => {
+    try {
+      const res = await monthlyGoalApi.getMonthWeeks(month);
+      return res.data.weeks;
+    } catch (e) {
+      console.error('Failed to get month weeks:', e);
+      return [];
+    }
+  },
+  createWeeklyAction: async (data) => {
+    try {
+      const res = await monthlyGoalApi.createWeeklyAction(data);
+      const action: WeeklyAction = {
+        id: res.data.id,
+        monthlyGoalId: res.data.monthly_goal_id,
+        title: res.data.title,
+        description: res.data.description,
+        weekNumber: parseInt(res.data.week_number),
+        startDate: res.data.start_date,
+        endDate: res.data.end_date,
+        completed: res.data.completed,
+        createdAt: res.data.created_at
+      };
+      return action;
+    } catch (e) {
+      console.error('Failed to create weekly action:', e);
+      throw e;
+    }
+  },
+  updateWeeklyAction: async (id, data) => {
+    try {
+      await monthlyGoalApi.updateWeeklyAction(id, data);
+    } catch (e) {
+      console.error('Failed to update weekly action:', e);
+      throw e;
+    }
+  },
+  deleteWeeklyAction: async (id) => {
+    try {
+      await monthlyGoalApi.deleteWeeklyAction(id);
+    } catch (e) {
+      console.error('Failed to delete weekly action:', e);
+      throw e;
+    }
+  },
+  createDailyAction: async (data) => {
+    try {
+      const res = await monthlyGoalApi.createDailyAction(data);
+      const action: DailyAction = {
+        id: res.data.id,
+        weeklyActionId: res.data.weekly_action_id,
+        monthlyGoalId: res.data.monthly_goal_id,
+        title: res.data.title,
+        description: res.data.description,
+        date: res.data.date,
+        scheduleId: res.data.schedule_id,
+        completed: res.data.completed,
+        createdAt: res.data.created_at
+      };
+      return action;
+    } catch (e) {
+      console.error('Failed to create daily action:', e);
+      throw e;
+    }
+  },
+  updateDailyAction: async (id, data) => {
+    try {
+      await monthlyGoalApi.updateDailyAction(id, data);
+    } catch (e) {
+      console.error('Failed to update daily action:', e);
+      throw e;
+    }
+  },
+  deleteDailyAction: async (id) => {
+    try {
+      await monthlyGoalApi.deleteDailyAction(id);
+    } catch (e) {
+      console.error('Failed to delete daily action:', e);
+      throw e;
+    }
+  },
+  loadGoalProgress: async (goalId) => {
+    try {
+      const res = await monthlyGoalApi.getGoalProgress(goalId);
+      const progress: MonthlyGoalProgress = {
+        goalId: res.data.goal_id,
+        goalTitle: res.data.goal_title,
+        totalWeeklyActions: res.data.total_weekly_actions,
+        completedWeeklyActions: res.data.completed_weekly_actions,
+        totalDailyActions: res.data.total_daily_actions,
+        completedDailyActions: res.data.completed_daily_actions,
+        overallProgress: res.data.overall_progress,
+        weeklyBreakdown: res.data.weekly_breakdown.map((wb: any) => ({
+          weekNumber: wb.week_number,
+          total: wb.total,
+          completed: wb.completed,
+          progress: wb.progress
+        }))
+      };
+      return progress;
+    } catch (e) {
+      console.error('Failed to load goal progress:', e);
+      return null;
+    }
+  },
+  loadMonthProgress: async (month) => {
+    set({ loading: true });
+    try {
+      const res = await monthlyGoalApi.getMonthProgress(month);
+      const progressList: MonthlyGoalProgress[] = res.data.goals.map((g: any) => ({
+        goalId: g.goal_id,
+        goalTitle: g.goal_title,
+        totalWeeklyActions: g.total_weekly_actions,
+        completedWeeklyActions: g.completed_weekly_actions,
+        totalDailyActions: g.total_daily_actions,
+        completedDailyActions: g.completed_daily_actions,
+        overallProgress: g.overall_progress,
+        weeklyBreakdown: g.weekly_breakdown.map((wb: any) => ({
+          weekNumber: wb.week_number,
+          total: wb.total,
+          completed: wb.completed,
+          progress: wb.progress
+        }))
+      }));
+      set({ monthProgress: progressList });
+    } catch (e) {
+      console.error('Failed to load month progress:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadDailyActions: async (date) => {
+    try {
+      const res = await monthlyGoalApi.getDailyActions(date);
+      const actions = res.data.map((a: any) => ({
+        id: a.id,
+        weeklyActionId: a.weekly_action_id,
+        monthlyGoalId: a.monthly_goal_id,
+        title: a.title,
+        description: a.description,
+        date: a.date,
+        scheduleId: a.schedule_id,
+        completed: a.completed,
+        createdAt: a.created_at,
+        goalTitle: a.goal_title,
+        goalCategory: a.goal_category,
+        weeklyTitle: a.weekly_title
+      }));
+      set({ dailyActions: actions });
+    } catch (e) {
+      console.error('Failed to load daily actions:', e);
+    }
+  },
+  setCurrentGoalDetails: (goal) => set({ currentGoalDetails: goal }),
 }));

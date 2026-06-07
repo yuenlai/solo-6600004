@@ -105,4 +105,57 @@ export const focusSessionApi = {
     api.get('/focus-sessions/statistics/interruptions', { params: { start_date: startDate, end_date: endDate } }),
 };
 
+export const monthlyGoalApi = {
+  list: (month?: string) => api.get('/monthly-goals', { params: { month } }),
+  get: (id: string) => api.get(`/monthly-goals/${id}`),
+  create: (data: { title: string; description?: string; month: string; category?: string; priority?: string }) =>
+    api.post('/monthly-goals', data),
+  update: (id: string, data: { title?: string; description?: string; category?: string; priority?: string; status?: string }) =>
+    api.put(`/monthly-goals/${id}`, data),
+  delete: (id: string) => api.delete(`/monthly-goals/${id}`),
+  getMonthWeeks: (month: string) => api.get(`/monthly-goals/weeks/${month}`),
+  createBreakdown: (data: {
+    monthly_goal_id: string;
+    weekly_actions: Array<{
+      monthly_goal_id: string;
+      title: string;
+      description?: string;
+      week_number: number;
+      start_date: string;
+      end_date: string;
+    }>;
+    daily_actions?: Array<{
+      weekly_action_id: string;
+      monthly_goal_id: string;
+      title: string;
+      description?: string;
+      date: string;
+    }>;
+  }) => api.post('/monthly-goals/breakdown', data),
+  createWeeklyAction: (data: {
+    monthly_goal_id: string;
+    title: string;
+    description?: string;
+    week_number: number;
+    start_date: string;
+    end_date: string;
+  }) => api.post('/monthly-goals/weekly-actions', data),
+  updateWeeklyAction: (id: string, data: { title?: string; description?: string; completed?: boolean }) =>
+    api.put(`/monthly-goals/weekly-actions/${id}`, data),
+  deleteWeeklyAction: (id: string) => api.delete(`/monthly-goals/weekly-actions/${id}`),
+  createDailyAction: (data: {
+    weekly_action_id: string;
+    monthly_goal_id: string;
+    title: string;
+    description?: string;
+    date: string;
+  }) => api.post('/monthly-goals/daily-actions', data),
+  updateDailyAction: (id: string, data: { title?: string; description?: string; completed?: boolean; schedule_id?: string }) =>
+    api.put(`/monthly-goals/daily-actions/${id}`, data),
+  deleteDailyAction: (id: string) => api.delete(`/monthly-goals/daily-actions/${id}`),
+  getGoalProgress: (id: string) => api.get(`/monthly-goals/progress/${id}`),
+  getMonthProgress: (month: string) => api.get(`/monthly-goals/progress/month/${month}`),
+  getDailyActions: (date: string) => api.get(`/monthly-goals/daily/${date}`),
+};
+
 export default api;

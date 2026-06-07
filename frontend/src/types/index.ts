@@ -162,3 +162,59 @@ export interface CreateDragState {
   startTime: string | null;
   endTime: string | null;
 }
+
+export interface MonthlyGoal {
+  id: string;
+  title: string;
+  description: string;
+  month: string;
+  category: string;
+  priority: 'low' | 'medium' | 'high';
+  status: 'active' | 'completed' | 'archived';
+  progress: number;
+  createdAt?: string;
+}
+
+export interface WeeklyAction {
+  id: string;
+  monthlyGoalId: string;
+  title: string;
+  description: string;
+  weekNumber: number;
+  startDate: string;
+  endDate: string;
+  completed: boolean;
+  createdAt?: string;
+}
+
+export interface DailyAction {
+  id: string;
+  weeklyActionId: string;
+  monthlyGoalId: string;
+  title: string;
+  description: string;
+  date: string;
+  scheduleId?: string;
+  completed: boolean;
+  createdAt?: string;
+}
+
+export interface MonthlyGoalWithDetails extends MonthlyGoal {
+  weeklyActions: (WeeklyAction & { dailyActions: DailyAction[] })[];
+}
+
+export interface MonthlyGoalProgress {
+  goalId: string;
+  goalTitle: string;
+  totalWeeklyActions: number;
+  completedWeeklyActions: number;
+  totalDailyActions: number;
+  completedDailyActions: number;
+  overallProgress: number;
+  weeklyBreakdown: {
+    weekNumber: number;
+    total: number;
+    completed: number;
+    progress: number;
+  }[];
+}
