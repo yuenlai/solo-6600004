@@ -20,25 +20,31 @@ const App: React.FC = () => {
   const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview } = useScheduleStore();
 
   useEffect(() => {
-    if (viewMode === 'week') {
-      loadWeekSchedules(selectedDate);
-    } else {
-      loadSchedules(selectedDate);
-    }
-    loadHabits();
-    loadChallenges();
-    loadDailyPlan(selectedDate);
+    const initData = async () => {
+      if (viewMode === 'week') {
+        await loadWeekSchedules(selectedDate);
+      } else {
+        await loadSchedules(selectedDate);
+      }
+      loadHabits();
+      loadChallenges();
+      await loadDailyPlan(selectedDate);
+    };
+    initData();
   }, []);
 
   useEffect(() => {
-    if (tab === 'schedule') {
-      if (viewMode === 'week') {
-        loadWeekSchedules(selectedDate);
-      } else {
-        loadSchedules(selectedDate);
+    const loadData = async () => {
+      if (tab === 'schedule') {
+        if (viewMode === 'week') {
+          await loadWeekSchedules(selectedDate);
+        } else {
+          await loadSchedules(selectedDate);
+        }
       }
-    }
-    loadDailyPlan(selectedDate);
+      await loadDailyPlan(selectedDate);
+    };
+    loadData();
   }, [selectedDate, tab, viewMode]);
 
   const handleQuickAdd = async () => {

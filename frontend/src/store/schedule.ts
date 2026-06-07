@@ -249,15 +249,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     try {
       const targetDate = date || get().selectedDate;
       const res = await dailyPlanApi.getMorningPlan(targetDate);
-      if (res.data) {
+      if (res.data && res.data.id) {
         set({
           morningPlan: {
             id: res.data.id,
             date: res.data.date,
-            focusItems: res.data.focus_items,
-            priorities: res.data.priorities,
-            scheduleIds: res.data.schedule_ids,
-            note: res.data.note,
+            focusItems: res.data.focus_items || [],
+            priorities: res.data.priorities || [],
+            scheduleIds: res.data.schedule_ids || [],
+            note: res.data.note || '',
             createdAt: res.data.created_at
           }
         });
@@ -273,18 +273,18 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     try {
       const targetDate = date || get().selectedDate;
       const res = await dailyPlanApi.getEveningReview(targetDate);
-      if (res.data) {
+      if (res.data && res.data.id) {
         set({
           eveningReview: {
             id: res.data.id,
             date: res.data.date,
-            completedCount: parseInt(res.data.completed_count),
-            totalCount: parseInt(res.data.total_count),
-            completionRate: parseFloat(res.data.completion_rate),
-            highlights: res.data.highlights,
-            improvements: res.data.improvements,
-            summary: res.data.summary,
-            mood: res.data.mood,
+            completedCount: parseInt(res.data.completed_count) || 0,
+            totalCount: parseInt(res.data.total_count) || 0,
+            completionRate: parseFloat(res.data.completion_rate) || 0,
+            highlights: res.data.highlights || '',
+            improvements: res.data.improvements || '',
+            summary: res.data.summary || '',
+            mood: res.data.mood || 'neutral',
             createdAt: res.data.created_at
           }
         });
@@ -300,24 +300,26 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     try {
       const targetDate = date || get().selectedDate;
       const res = await dailyPlanApi.getCompletionStats(targetDate);
-      set({
-        completionStats: {
-          date: res.data.date,
-          totalCount: res.data.total_count,
-          completedCount: res.data.completed_count,
-          completionRate: res.data.completion_rate,
-          schedules: res.data.schedules.map((s: any) => ({
-            id: s.id,
-            title: s.title,
-            description: '',
-            startTime: s.start_time,
-            endTime: s.end_time,
-            priority: s.priority,
-            category: s.category,
-            completed: s.completed
-          }))
-        }
-      });
+      if (res.data) {
+        set({
+          completionStats: {
+            date: res.data.date,
+            totalCount: res.data.total_count || 0,
+            completedCount: res.data.completed_count || 0,
+            completionRate: res.data.completion_rate || 0,
+            schedules: (res.data.schedules || []).map((s: any) => ({
+              id: s.id,
+              title: s.title,
+              description: '',
+              startTime: s.start_time,
+              endTime: s.end_time,
+              priority: s.priority,
+              category: s.category,
+              completed: s.completed
+            }))
+          }
+        });
+      }
     } catch (e) {
       console.error('Failed to load completion stats:', e);
     }
@@ -325,78 +327,70 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   loadDailyPlan: async (date) => {
     try {
       const targetDate = date || get().selectedDate;
+      set({ morningPlan: null, eveningReview: null, completionStats: null });
+      
       const res = await dailyPlanApi.getDailyPlan(targetDate);
       const data = res.data;
       
+      let morningPlanData: MorningPlan | null = null;
+      let eveningReviewData: EveningReview | null = null;
+      
       if (data.morning_plan) {
-        set({
-          morningPlan: {
-            id: data.morning_plan.id,
-            date: data.morning_plan.date,
-            focusItems: data.morning_plan.focus_items,
-            priorities: data.morning_plan.priorities,
-            scheduleIds: data.morning_plan.schedule_ids,
-            note: data.morning_plan.note,
-            createdAt: data.morning_plan.created_at
-          }
-        });
-      } else {
-        set({ morningPlan: null });
+        morningPlanData = {
+          id: data.morning_plan.id,
+          date: data.morning_plan.date,
+          focusItems: data.morning_plan.focus_items,
+          priorities: data.morning_plan.priorities,
+          scheduleIds: data.morning_plan.schedule_ids,
+          note: data.morning_plan.note,
+          createdAt: data.morning_plan.created_at
+        };
       }
       
       if (data.evening_review) {
-        set({
-          eveningReview: {
-            id: data.evening_review.id,
-            date: data.evening_review.date,
-            completedCount: parseInt(data.evening_review.completed_count),
-            totalCount: parseInt(data.evening_review.total_count),
-            completionRate: parseFloat(data.evening_review.completion_rate),
-            highlights: data.evening_review.highlights,
-            improvements: data.evening_review.improvements,
-            summary: data.evening_review.summary,
-            mood: data.evening_review.mood,
-            createdAt: data.evening_review.created_at
-          }
-        });
-      } else {
-        set({ eveningReview: null });
+        eveningReviewData = {
+          id: data.evening_review.id,
+          date: data.evening_review.date,
+          completedCount: parseInt(data.evening_review.completed_count),
+          totalCount: parseInt(data.evening_review.total_count),
+          completionRate: parseFloat(data.evening_review.completion_rate),
+          highlights: data.evening_review.highlights,
+          improvements: data.evening_review.improvements,
+          summary: data.evening_review.summary,
+          mood: data.evening_review.mood,
+          createdAt: data.evening_review.created_at
+        };
       }
       
+      const completionStatsData: CompletionStats = {
+        date: data.date,
+        totalCount: data.completion_stats.total_count,
+        completedCount: data.completion_stats.completed_count,
+        completionRate: data.completion_stats.completion_rate,
+        schedules: get().schedules
+      };
+      
       set({
-        completionStats: {
-          date: data.date,
-          totalCount: data.completion_stats.total_count,
-          completedCount: data.completion_stats.completed_count,
-          completionRate: data.completion_stats.completion_rate,
-          schedules: get().schedules
-        }
+        morningPlan: morningPlanData,
+        eveningReview: eveningReviewData,
+        completionStats: completionStatsData
       });
     } catch (e) {
       console.error('Failed to load daily plan:', e);
+      set({ morningPlan: null, eveningReview: null, completionStats: null });
     }
   },
   createMorningPlan: async (data) => {
     try {
       const targetDate = get().selectedDate;
-      const res = await dailyPlanApi.createMorningPlan({
+      await dailyPlanApi.createMorningPlan({
         date: targetDate,
         focus_items: data.focusItems,
         priorities: data.priorities,
         schedule_ids: data.scheduleIds,
         note: data.note
       });
-      set({
-        morningPlan: {
-          id: res.data.id,
-          date: res.data.date,
-          focusItems: res.data.focus_items,
-          priorities: res.data.priorities,
-          scheduleIds: res.data.schedule_ids,
-          note: res.data.note,
-          createdAt: res.data.created_at
-        }
-      });
+      await get().loadDailyPlan(targetDate);
     } catch (e) {
       console.error('Failed to create morning plan:', e);
       throw e;
@@ -410,18 +404,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       if (data.scheduleIds !== undefined) updateData.schedule_ids = data.scheduleIds;
       if (data.note !== undefined) updateData.note = data.note;
       
-      const res = await dailyPlanApi.updateMorningPlan(date, updateData);
-      set({
-        morningPlan: {
-          id: res.data.id,
-          date: res.data.date,
-          focusItems: res.data.focus_items,
-          priorities: res.data.priorities,
-          scheduleIds: res.data.schedule_ids,
-          note: res.data.note,
-          createdAt: res.data.created_at
-        }
-      });
+      await dailyPlanApi.updateMorningPlan(date, updateData);
+      await get().loadDailyPlan(date);
     } catch (e) {
       console.error('Failed to update morning plan:', e);
       throw e;
@@ -439,27 +423,14 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   createEveningReview: async (data) => {
     try {
       const targetDate = get().selectedDate;
-      const res = await dailyPlanApi.createEveningReview({
+      await dailyPlanApi.createEveningReview({
         date: targetDate,
         highlights: data.highlights,
         improvements: data.improvements,
         summary: data.summary,
         mood: data.mood
       });
-      set({
-        eveningReview: {
-          id: res.data.id,
-          date: res.data.date,
-          completedCount: parseInt(res.data.completed_count),
-          totalCount: parseInt(res.data.total_count),
-          completionRate: parseFloat(res.data.completion_rate),
-          highlights: res.data.highlights,
-          improvements: res.data.improvements,
-          summary: res.data.summary,
-          mood: res.data.mood,
-          createdAt: res.data.created_at
-        }
-      });
+      await get().loadDailyPlan(targetDate);
     } catch (e) {
       console.error('Failed to create evening review:', e);
       throw e;
@@ -467,21 +438,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
   updateEveningReview: async (date, data) => {
     try {
-      const res = await dailyPlanApi.updateEveningReview(date, data);
-      set({
-        eveningReview: {
-          id: res.data.id,
-          date: res.data.date,
-          completedCount: parseInt(res.data.completed_count),
-          totalCount: parseInt(res.data.total_count),
-          completionRate: parseFloat(res.data.completion_rate),
-          highlights: res.data.highlights,
-          improvements: res.data.improvements,
-          summary: res.data.summary,
-          mood: res.data.mood,
-          createdAt: res.data.created_at
-        }
-      });
+      await dailyPlanApi.updateEveningReview(date, data);
+      await get().loadDailyPlan(date);
     } catch (e) {
       console.error('Failed to update evening review:', e);
       throw e;

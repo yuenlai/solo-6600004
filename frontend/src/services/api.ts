@@ -73,7 +73,7 @@ export const dailyPlanApi = {
     schedule_ids?: string[];
     note?: string;
   }) => api.put(`/daily-plans/morning/${date}`, data),
-  generateMorningSuggestion: (date: string) => api.post(`/daily-plans/morning/generate-suggestion?date=${date}`),
+  generateMorningSuggestion: (date: string) => api.get(`/daily-plans/morning/generate-suggestion?date=${date}`),
   getCompletionStats: (date: string) => api.get(`/daily-plans/completion-stats/${date}`),
   getEveningReview: (date: string) => api.get(`/daily-plans/evening/${date}`),
   createEveningReview: (data: {

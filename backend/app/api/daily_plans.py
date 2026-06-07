@@ -83,7 +83,7 @@ async def update_morning_plan(date: str, data: MorningPlanUpdate, db: AsyncSessi
     return plan
 
 
-@router.post("/morning/generate-suggestion")
+@router.get("/morning/generate-suggestion")
 async def generate_morning_suggestion(date: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Schedule)

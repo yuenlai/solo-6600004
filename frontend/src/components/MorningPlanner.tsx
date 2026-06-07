@@ -15,24 +15,35 @@ export const MorningPlanner: React.FC<MorningPlannerProps> = ({ onClose }) => {
   const [newPriority, setNewPriority] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadMorningPlan(selectedDate);
+    const loadData = async () => {
+      setIsLoading(true);
+      setFocusItems([]);
+      setPriorities([]);
+      setNote('');
+      setIsEditing(false);
+      
+      await loadMorningPlan(selectedDate);
+      setIsLoading(false);
+    };
+    loadData();
   }, [selectedDate]);
 
   useEffect(() => {
-    if (morningPlan) {
+    if (!isLoading && morningPlan) {
       setFocusItems(morningPlan.focusItems || []);
       setPriorities(morningPlan.priorities || []);
       setNote(morningPlan.note || '');
       setIsEditing(true);
-    } else {
+    } else if (!isLoading && !morningPlan) {
       setFocusItems([]);
       setPriorities([]);
       setNote('');
       setIsEditing(false);
     }
-  }, [morningPlan]);
+  }, [morningPlan, isLoading]);
 
   const handleAddFocusItem = () => {
     if (newFocusItem.trim()) {
@@ -115,6 +126,23 @@ export const MorningPlanner: React.FC<MorningPlannerProps> = ({ onClose }) => {
     const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
     return date.toLocaleDateString('zh-CN', options);
   };
+
+  if (isLoading) {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 1000
+      }} onClick={onClose}>
+        <div style={{
+          background: '#fff', borderRadius: '12px', width: '700px',
+          maxWidth: '90vw', padding: '40px', textAlign: 'center'
+        }} onClick={e => e.stopPropagation()}>
+          <p style={{ margin: 0, fontSize: '16px', color: '#666' }}>加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

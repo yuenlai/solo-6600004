@@ -24,45 +24,56 @@ export const EveningReview: React.FC<EveningReviewProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [stats, setStats] = useState<{ completed: number; total: number; rate: number } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadEveningReview(selectedDate);
-    loadCompletionStats(selectedDate);
+    const loadData = async () => {
+      setIsLoading(true);
+      setHighlights('');
+      setImprovements('');
+      setSummary('');
+      setMood('neutral');
+      setIsEditing(false);
+      setStats(null);
+      
+      await Promise.all([
+        loadEveningReview(selectedDate),
+        loadCompletionStats(selectedDate)
+      ]);
+      setIsLoading(false);
+    };
+    loadData();
   }, [selectedDate]);
 
   useEffect(() => {
-    if (eveningReview) {
+    if (!isLoading && eveningReview) {
       setHighlights(eveningReview.highlights || '');
       setImprovements(eveningReview.improvements || '');
       setSummary(eveningReview.summary || '');
       setMood(eveningReview.mood || 'neutral');
       setIsEditing(true);
-      setStats({
-        completed: eveningReview.completedCount,
-        total: eveningReview.totalCount,
-        rate: eveningReview.completionRate
-      });
-    } else {
+    } else if (!isLoading && !eveningReview) {
       setHighlights('');
       setImprovements('');
       setSummary('');
       setMood('neutral');
       setIsEditing(false);
     }
-  }, [eveningReview]);
+  }, [eveningReview, isLoading]);
 
   useEffect(() => {
-    if (completionStats && !eveningReview) {
+    if (completionStats) {
       setStats({
         completed: completionStats.completedCount,
         total: completionStats.totalCount,
         rate: completionStats.completionRate
       });
     }
-  }, [completionStats, eveningReview]);
+  }, [completionStats]);
 
-  const handleToggleComplete = (scheduleId: string) => {
-    toggleComplete(scheduleId);
+  const handleToggleComplete = async (scheduleId: string) => {
+    await toggleComplete(scheduleId);
+    await loadCompletionStats(selectedDate);
   };
 
   const handleSave = async () => {
@@ -115,6 +126,23 @@ export const EveningReview: React.FC<EveningReviewProps> = ({ onClose }) => {
   const sortedSchedules = [...schedules].sort((a, b) => 
     new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
+
+  if (isLoading) {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 1000
+      }} onClick={onClose}>
+        <div style={{
+          background: '#fff', borderRadius: '12px', width: '750px',
+          maxWidth: '90vw', padding: '40px', textAlign: 'center'
+        }} onClick={e => e.stopPropagation()}>
+          <p style={{ margin: 0, fontSize: '16px', color: '#666' }}>加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
