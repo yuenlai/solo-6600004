@@ -56,4 +56,39 @@ export const challengeApi = {
   updateStatus: (id: string) => api.put(`/challenges/${id}/status`),
   delete: (id: string) => api.delete(`/challenges/${id}`),
 };
+
+export const dailyPlanApi = {
+  getDailyPlan: (date: string) => api.get(`/daily-plans/${date}`),
+  getMorningPlan: (date: string) => api.get(`/daily-plans/morning/${date}`),
+  createMorningPlan: (data: {
+    date: string;
+    focus_items: string[];
+    priorities: string[];
+    schedule_ids: string[];
+    note: string;
+  }) => api.post('/daily-plans/morning', data),
+  updateMorningPlan: (date: string, data: {
+    focus_items?: string[];
+    priorities?: string[];
+    schedule_ids?: string[];
+    note?: string;
+  }) => api.put(`/daily-plans/morning/${date}`, data),
+  generateMorningSuggestion: (date: string) => api.post(`/daily-plans/morning/generate-suggestion?date=${date}`),
+  getCompletionStats: (date: string) => api.get(`/daily-plans/completion-stats/${date}`),
+  getEveningReview: (date: string) => api.get(`/daily-plans/evening/${date}`),
+  createEveningReview: (data: {
+    date: string;
+    highlights: string;
+    improvements: string;
+    summary: string;
+    mood: string;
+  }) => api.post('/daily-plans/evening', data),
+  updateEveningReview: (date: string, data: {
+    highlights?: string;
+    improvements?: string;
+    summary?: string;
+    mood?: string;
+  }) => api.put(`/daily-plans/evening/${date}`, data),
+};
+
 export default api;

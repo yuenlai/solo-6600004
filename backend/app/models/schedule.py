@@ -67,3 +67,26 @@ class HabitChallengeRecord(Base):
     date = Column(String(10), nullable=False)
     completed = Column(Boolean, default=False)
     habit_value = Column(String(10), default="0")
+
+class MorningPlan(Base):
+    __tablename__ = "morning_plans"
+    id = Column(String, primary_key=True)
+    date = Column(String(10), nullable=False, unique=True)
+    focus_items = Column(JSON, default=list)
+    priorities = Column(JSON, default=list)
+    schedule_ids = Column(JSON, default=list)
+    note = Column(Text, default="")
+    created_at = Column(DateTime, server_default=func.now())
+
+class EveningReview(Base):
+    __tablename__ = "evening_reviews"
+    id = Column(String, primary_key=True)
+    date = Column(String(10), nullable=False, unique=True)
+    completed_count = Column(String(10), default="0")
+    total_count = Column(String(10), default="0")
+    completion_rate = Column(String(10), default="0")
+    highlights = Column(Text, default="")
+    improvements = Column(Text, default="")
+    summary = Column(Text, default="")
+    mood = Column(String(20), default="neutral")
+    created_at = Column(DateTime, server_default=func.now())

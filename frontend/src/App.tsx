@@ -5,6 +5,8 @@ import { PomodoroTimer } from './components/PomodoroTimer';
 import { WeeklyChart } from './components/WeeklyChart';
 import { NaturalLanguageInput } from './components/NaturalLanguageInput';
 import { WeekTemplateSelector } from './components/WeekTemplateSelector';
+import { MorningPlanner } from './components/MorningPlanner';
+import { EveningReview } from './components/EveningReview';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
@@ -13,7 +15,9 @@ const App: React.FC = () => {
   const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
   const [showSmartInput, setShowSmartInput] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits } = useScheduleStore();
+  const [showMorningPlanner, setShowMorningPlanner] = useState(false);
+  const [showEveningReview, setShowEveningReview] = useState(false);
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview } = useScheduleStore();
 
   useEffect(() => {
     if (viewMode === 'week') {
@@ -23,6 +27,7 @@ const App: React.FC = () => {
     }
     loadHabits();
     loadChallenges();
+    loadDailyPlan(selectedDate);
   }, []);
 
   useEffect(() => {
@@ -33,6 +38,7 @@ const App: React.FC = () => {
         loadSchedules(selectedDate);
       }
     }
+    loadDailyPlan(selectedDate);
   }, [selectedDate, tab, viewMode]);
 
   const handleQuickAdd = async () => {
@@ -77,6 +83,14 @@ const App: React.FC = () => {
           <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
             style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }} />
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setShowMorningPlanner(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #ff9800',
+              background: morningPlan ? '#fff3e0' : '#fff', color: '#ff9800', cursor: 'pointer'
+            }}>{morningPlan ? '🌅 已规划' : '🌅 晨间规划'}</button>
+            <button onClick={() => setShowEveningReview(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #7b1fa2',
+              background: eveningReview ? '#f3e5f5' : '#fff', color: '#7b1fa2', cursor: 'pointer'
+            }}>{eveningReview ? '🌙 已复盘' : '🌙 晚间复盘'}</button>
             <button onClick={() => setShowTemplateSelector(true)} style={{
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
@@ -98,6 +112,8 @@ const App: React.FC = () => {
       </main>
       {showSmartInput && <NaturalLanguageInput onClose={() => setShowSmartInput(false)} />}
       {showTemplateSelector && <WeekTemplateSelector onClose={() => setShowTemplateSelector(false)} />}
+      {showMorningPlanner && <MorningPlanner onClose={() => setShowMorningPlanner(false)} />}
+      {showEveningReview && <EveningReview onClose={() => setShowEveningReview(false)} />}
     </div>
   );
 };

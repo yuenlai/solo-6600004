@@ -78,3 +78,45 @@ export interface HabitChallengeRecord {
   completed: boolean;
   habitValue: number;
 }
+
+export interface MorningPlan {
+  id: string;
+  date: string;
+  focusItems: string[];
+  priorities: string[];
+  scheduleIds: string[];
+  note: string;
+  createdAt?: string;
+}
+
+export interface EveningReview {
+  id: string;
+  date: string;
+  completedCount: number;
+  totalCount: number;
+  completionRate: number;
+  highlights: string;
+  improvements: string;
+  summary: string;
+  mood: 'great' | 'good' | 'neutral' | 'bad' | 'terrible';
+  createdAt?: string;
+}
+
+export interface CompletionStats {
+  date: string;
+  totalCount: number;
+  completedCount: number;
+  completionRate: number;
+  schedules: Schedule[];
+}
+
+export interface DailyPlan {
+  date: string;
+  morningPlan: MorningPlan | null;
+  eveningReview: EveningReview | null;
+  completionStats: {
+    totalCount: number;
+    completedCount: number;
+    completionRate: number;
+  };
+}
