@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule } from '../types';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
@@ -11,8 +11,10 @@ interface ScheduleState {
   focusSessions: FocusSession[];
   interruptionStatistics: InterruptionStatistics | null;
   selectedDate: string;
-  viewMode: 'day' | 'week';
+  viewMode: 'day' | 'week' | 'multiDay';
   scheduleViewMode: 'list' | 'timeline';
+  multiDayCount: number;
+  multiDayViewData: MultiDayViewData | null;
   loading: boolean;
   morningPlan: MorningPlan | null;
   eveningReview: EveningReview | null;
@@ -78,10 +80,13 @@ interface ScheduleState {
   loadFocusSessionsByRange: (startDate: string, endDate: string) => Promise<void>;
   loadInterruptionStatistics: (startDate: string, endDate: string) => Promise<void>;
   setSelectedDate: (date: string) => void;
-  setViewMode: (mode: 'day' | 'week') => void;
+  setViewMode: (mode: 'day' | 'week' | 'multiDay') => void;
+  setMultiDayCount: (count: number) => void;
   setSchedules: (schedules: Schedule[]) => void;
   loadSchedules: (date?: string) => Promise<void>;
   loadWeekSchedules: (weekStartDate?: string) => Promise<void>;
+  loadMultiDaySchedules: (startDate?: string, dayCount?: number) => Promise<void>;
+  generateMultiDayViewData: (startDate: string, dayCount: number, schedules: Schedule[]) => MultiDayViewData;
   loadHabits: () => Promise<void>;
   loadChallenges: () => Promise<void>;
   addChallenge: (c: HabitChallenge) => void;
@@ -132,6 +137,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   selectedDate: new Date().toISOString().split('T')[0],
   viewMode: 'day',
   scheduleViewMode: 'list',
+  multiDayCount: 7,
+  multiDayViewData: null,
   loading: false,
   morningPlan: null,
   eveningReview: null,
@@ -400,6 +407,172 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
   setSelectedDate: (date) => set({ selectedDate: date }),
   setViewMode: (mode) => set({ viewMode: mode }),
+  setMultiDayCount: (count) => set({ multiDayCount: count }),
+  generateMultiDayViewData: (startDate, dayCount, schedules) => {
+    const dates: string[] = [];
+    const start = new Date(startDate);
+    for (let i = 0; i < dayCount; i++) {
+      dates.push(formatDate(addDays(start, i)));
+    }
+    const endDate = dates[dates.length - 1];
+
+    const schedulesByDate = new Map<string, Schedule[]>();
+    dates.forEach(date => schedulesByDate.set(date, []));
+
+    const crossDaySchedules: CrossDaySchedule[] = [];
+    const allConflicts: { schedule: Schedule; conflictInfo: ConflictInfo }[] = [];
+    const conflicts = new Map<string, ConflictInfo>();
+
+    schedules.forEach(schedule => {
+      const sDate = schedule.startTime.split('T')[0];
+      const eDate = schedule.endTime.split('T')[0];
+      const isCrossDay = sDate !== eDate;
+
+      if (schedulesByDate.has(sDate)) {
+        schedulesByDate.get(sDate)!.push(schedule);
+      }
+
+      if (isCrossDay) {
+        const s = new Date(schedule.startTime);
+        const e = new Date(schedule.endTime);
+        const totalDays = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+        
+        for (let i = 0; i < totalDays; i++) {
+          const currentDate = formatDate(addDays(s, i));
+          if (dates.includes(currentDate)) {
+            crossDaySchedules.push({
+              ...schedule,
+              startDate: sDate,
+              endDate: eDate,
+              totalDays,
+              dayOffset: i,
+              isFirstDay: i === 0,
+              isLastDay: i === totalDays - 1,
+            });
+          }
+        }
+      }
+
+      const existingConflicts = get().conflicts;
+      if (existingConflicts.has(schedule.id)) {
+        const conflictInfo = existingConflicts.get(schedule.id)!;
+        allConflicts.push({ schedule, conflictInfo });
+        conflicts.set(schedule.id, conflictInfo);
+      }
+    });
+
+    const freeTimeSlots: FreeTimeSlot[] = [];
+    dates.forEach(date => {
+      const daySchedules = schedulesByDate.get(date) || [];
+      const sorted = [...daySchedules].sort((a, b) => 
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+      );
+      
+      const dayStart = new Date(`${date}T00:00:00`);
+      const dayEnd = new Date(`${date}T23:59:59`);
+      let currentTime = dayStart;
+
+      sorted.forEach(schedule => {
+        const sStart = new Date(schedule.startTime);
+        if (sStart.getTime() > currentTime.getTime()) {
+          const duration = Math.round((sStart.getTime() - currentTime.getTime()) / 60000);
+          if (duration >= 30) {
+            freeTimeSlots.push({
+              date,
+              startTime: currentTime.toISOString(),
+              endTime: schedule.startTime,
+              durationMinutes: duration,
+            });
+          }
+        }
+        const sEnd = new Date(schedule.endTime);
+        if (sEnd.getTime() > currentTime.getTime()) {
+          currentTime = sEnd;
+        }
+      });
+
+      if (currentTime.getTime() < dayEnd.getTime()) {
+        const duration = Math.round((dayEnd.getTime() - currentTime.getTime()) / 60000);
+        if (duration >= 30) {
+          freeTimeSlots.push({
+            date,
+            startTime: currentTime.toISOString(),
+            endTime: dayEnd.toISOString(),
+            durationMinutes: duration,
+          });
+        }
+      }
+    });
+
+    const daySummaries: DaySummary[] = dates.map(date => {
+      const daySchedules = schedulesByDate.get(date) || [];
+      const dayFreeSlots = freeTimeSlots.filter(slot => slot.date === date);
+      let totalDuration = 0;
+      let completedCount = 0;
+      let highPriorityCount = 0;
+      
+      daySchedules.forEach(s => {
+        const dur = Math.round((new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000);
+        totalDuration += dur;
+        if (s.completed) completedCount++;
+        if (s.priority === 'high') highPriorityCount++;
+      });
+
+      const totalFreeTime = dayFreeSlots.reduce((sum, slot) => sum + slot.durationMinutes, 0);
+
+      return {
+        date,
+        totalSchedules: daySchedules.length,
+        completedCount,
+        highPriorityCount,
+        totalDurationMinutes: totalDuration,
+        freeTimeMinutes: totalFreeTime,
+      };
+    });
+
+    return {
+      startDate,
+      endDate,
+      dayCount,
+      dates,
+      schedulesByDate,
+      crossDaySchedules,
+      freeTimeSlots,
+      conflicts,
+      daySummaries,
+      allConflicts,
+    };
+  },
+  loadMultiDaySchedules: async (startDate, dayCount) => {
+    set({ loading: true });
+    try {
+      const targetStart = startDate || get().selectedDate;
+      const targetCount = dayCount || get().multiDayCount;
+      const start = new Date(targetStart);
+      const end = addDays(start, targetCount - 1);
+      
+      const res = await scheduleApi.listByRange(formatDate(start), formatDate(end));
+      const schedules = res.data.map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        priority: s.priority,
+        category: s.category,
+        completed: s.completed,
+        recurring: s.recurring,
+      }));
+      
+      set({ schedules });
+      const viewData = get().generateMultiDayViewData(formatDate(start), targetCount, schedules);
+      set({ multiDayViewData: viewData });
+    } catch (e) {
+      console.error('Failed to load multi-day schedules:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
   loadHabits: async () => {
     set({ loading: true });
     try {

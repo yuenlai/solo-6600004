@@ -23,12 +23,14 @@ const App: React.FC = () => {
   const [showEveningReview, setShowEveningReview] = useState(false);
   const [showGoalPlanner, setShowGoalPlanner] = useState(false);
   const [showExceptionDayManager, setShowExceptionDayManager] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
       if (viewMode === 'week') {
         await loadWeekSchedules(selectedDate);
+      } else if (viewMode === 'multiDay') {
+        await loadMultiDaySchedules(selectedDate, multiDayCount);
       } else {
         await loadSchedules(selectedDate);
       }
@@ -46,6 +48,8 @@ const App: React.FC = () => {
       if (tab === 'schedule') {
         if (viewMode === 'week') {
           await loadWeekSchedules(selectedDate);
+        } else if (viewMode === 'multiDay') {
+          await loadMultiDaySchedules(selectedDate, multiDayCount);
         } else {
           await loadSchedules(selectedDate);
         }
@@ -60,7 +64,7 @@ const App: React.FC = () => {
       await checkExceptionDay(selectedDate);
     };
     loadData();
-  }, [selectedDate, tab, viewMode]);
+  }, [selectedDate, tab, viewMode, multiDayCount]);
 
   const handleQuickAdd = async () => {
     const title = prompt('日程标题:');

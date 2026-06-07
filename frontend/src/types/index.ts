@@ -247,3 +247,41 @@ export interface ExceptionDayWithDetails extends ExceptionDay {
   affectedSchedules: Schedule[];
   affectedHabits: Habit[];
 }
+
+export interface CrossDaySchedule extends Schedule {
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  dayOffset: number;
+  isFirstDay: boolean;
+  isLastDay: boolean;
+}
+
+export interface FreeTimeSlot {
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+}
+
+export interface DaySummary {
+  date: string;
+  totalSchedules: number;
+  completedCount: number;
+  highPriorityCount: number;
+  totalDurationMinutes: number;
+  freeTimeMinutes: number;
+}
+
+export interface MultiDayViewData {
+  startDate: string;
+  endDate: string;
+  dayCount: number;
+  dates: string[];
+  schedulesByDate: Map<string, Schedule[]>;
+  crossDaySchedules: CrossDaySchedule[];
+  freeTimeSlots: FreeTimeSlot[];
+  conflicts: Map<string, ConflictInfo>;
+  daySummaries: DaySummary[];
+  allConflicts: { schedule: Schedule; conflictInfo: ConflictInfo }[];
+}

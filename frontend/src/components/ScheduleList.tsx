@@ -5,6 +5,7 @@ import { Schedule } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
 import { ChallengeCard } from './HabitChallengeCard';
 import { DragDropScheduler } from './DragDropScheduler';
+import { MultiDayView } from './MultiDayView';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -366,16 +367,35 @@ export const ScheduleList: React.FC = () => {
                 fontSize: '13px',
               }}
             >周视图</button>
+            <button
+              onClick={() => setViewMode('multiDay')}
+              style={{
+                padding: '6px 16px',
+                border: '1px solid #ddd',
+                borderRadius: '16px',
+                background: viewMode === 'multiDay' ? '#1a237e' : '#fff',
+                color: viewMode === 'multiDay' ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >多日视图</button>
             {viewMode === 'week' && (
               <span style={{ marginLeft: '12px', fontSize: '12px', color: '#999' }}>
                 💡 点击日期可切换到日视图
+              </span>
+            )}
+            {viewMode === 'multiDay' && (
+              <span style={{ marginLeft: '12px', fontSize: '12px', color: '#999' }}>
+                📊 跨天任务、空档、冲突集中展示
               </span>
             )}
           </>
         )}
       </div>
       {scheduleViewMode === 'timeline' ? <DragDropScheduler /> : (
-        viewMode === 'day' ? renderDayView() : renderWeekView()
+        viewMode === 'day' ? renderDayView() :
+        viewMode === 'week' ? renderWeekView() :
+        <MultiDayView />
       )}
     </div>
       {rescheduleSchedule && (
