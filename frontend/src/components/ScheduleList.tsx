@@ -1,10 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useScheduleStore } from '../store/schedule';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
+import { Schedule, RescheduleMode } from '../types';
+import { RescheduleAssistant } from './RescheduleAssistant';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-const ScheduleItem: React.FC<{ s: any; compact?: boolean }> = ({ s, compact }) => {
+interface ScheduleItemProps {
+  s: Schedule;
+  compact?: boolean;
+  onReschedule: (schedule: Schedule) => void;
+}
+
+const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule }) => {
   const { toggleComplete, deleteSchedule } = useScheduleStore();
   return (
     <div style={{
@@ -32,6 +40,19 @@ const ScheduleItem: React.FC<{ s: any; compact?: boolean }> = ({ s, compact }) =
           background: s.priority === 'high' ? '#ffcdd2' : s.priority === 'medium' ? '#fff9c4' : '#c8e6c9'
         }}>{s.priority === 'high' ? '高' : s.priority === 'medium' ? '中' : '低'}</span>
       )}
+      {!compact && !s.completed && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onReschedule(s); }}
+          style={{
+            border: 'none', background: 'none', cursor: 'pointer',
+            color: '#1a237e', fontSize: '14px', padding: '4px 8px',
+            borderRadius: '4px'
+          }}
+          title="智能改期"
+        >
+          🔄
+        </button>
+      )}
       <button onClick={() => deleteSchedule(s.id)} style={{
         border: 'none', background: 'none', cursor: 'pointer',
         color: '#999', fontSize: compact ? '14px' : '18px'
@@ -42,6 +63,15 @@ const ScheduleItem: React.FC<{ s: any; compact?: boolean }> = ({ s, compact }) =
 
 export const ScheduleList: React.FC = () => {
   const { schedules, selectedDate, viewMode, setViewMode, setSelectedDate } = useScheduleStore();
+  const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
+
+  const getDurationMinutes = (start: string, end: string) => {
+    return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000);
+  };
+
+  const handleReschedule = (schedule: Schedule) => {
+    setRescheduleSchedule(schedule);
+  };
 
   const getWeekDates = () => {
     const start = getWeekStartDate(new Date(selectedDate));
@@ -58,7 +88,7 @@ export const ScheduleList: React.FC = () => {
         <h2 style={{ margin: '0 0 16px' }}>📅 {selectedDate} 日程</h2>
         {daySchedules.length === 0 ? (
           <p style={{ color: '#999', textAlign: 'center', marginTop: '40px' }}>暂无日程安排</p>
-        ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} />)}
+        ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} onReschedule={handleReschedule} />)}
       </div>
     );
   };
@@ -107,7 +137,7 @@ export const ScheduleList: React.FC = () => {
                     <p style={{ color: '#ccc', textAlign: 'center', fontSize: '11px', marginTop: '20px' }}>
                       空
                     </p>
-                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact />)}
+                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact onReschedule={handleReschedule} />)}
                 </div>
               </div>
             );
@@ -118,16 +148,17 @@ export const ScheduleList: React.FC = () => {
   };
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-      <div style={{
-        padding: '12px 16px',
-        background: '#fff',
-        borderBottom: '1px solid #e0e0e0',
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-      }}>
-        <span style={{ fontSize: '13px', color: '#666', marginRight: '8px' }}>视图:</span>
+    <>
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          padding: '12px 16px',
+          background: '#fff',
+          borderBottom: '1px solid #e0e0e0',
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+        }}>
+          <span style={{ fontSize: '13px', color: '#666', marginRight: '8px' }}>视图:</span>
         <button
           onClick={() => setViewMode('day')}
           style={{
@@ -160,5 +191,21 @@ export const ScheduleList: React.FC = () => {
       </div>
       {viewMode === 'day' ? renderDayView() : renderWeekView()}
     </div>
+      {rescheduleSchedule && (
+        <RescheduleAssistant
+          mode={{
+            type: 'existing',
+            schedule: rescheduleSchedule,
+            title: rescheduleSchedule.title,
+            durationMinutes: getDurationMinutes(rescheduleSchedule.startTime, rescheduleSchedule.endTime),
+            priority: rescheduleSchedule.priority,
+            category: rescheduleSchedule.category,
+            preferredStartTime: rescheduleSchedule.startTime
+          }}
+          onClose={() => setRescheduleSchedule(null)}
+          onConfirmed={() => setRescheduleSchedule(null)}
+        />
+      )}
+    </>
   );
 };

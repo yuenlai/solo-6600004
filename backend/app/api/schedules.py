@@ -1,11 +1,11 @@
 import uuid
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from ..core.database import get_db
 from ..models.schedule import Schedule
 
@@ -26,6 +26,44 @@ class ParsedSchedule(BaseModel):
 
 class ScheduleUpdate(BaseModel):
     title: Optional[str] = None; completed: Optional[bool] = None
+    start_time: Optional[str] = None; end_time: Optional[str] = None
+    priority: Optional[str] = None; category: Optional[str] = None
+
+class ConflictCheckRequest(BaseModel):
+    start_time: str
+    end_time: str
+    exclude_id: Optional[str] = None
+
+class ConflictInfo(BaseModel):
+    has_conflict: bool
+    conflicting_schedules: List[dict]
+    message: str
+
+class RescheduleOption(BaseModel):
+    option_id: str
+    title: str
+    start_time: str
+    end_time: str
+    duration_minutes: int
+    score: int
+    reason: str
+    original_schedule: Optional[dict] = None
+
+class RescheduleRequest(BaseModel):
+    schedule_id: Optional[str] = None
+    title: str
+    preferred_start_time: Optional[str] = None
+    duration_minutes: int
+    priority: str = "medium"
+    category: str = "工作"
+    date: Optional[str] = None
+    max_options: int = 5
+
+class RescheduleConfirmRequest(BaseModel):
+    schedule_id: str
+    new_start_time: str
+    new_end_time: str
+    option_id: Optional[str] = None
 
 def _parse_time_expression(time_str: str, base_date: str) -> Optional[datetime]:
     time_str = time_str.strip()
@@ -183,7 +221,16 @@ async def list_schedules(
 
 @router.post("")
 async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_db)):
-    s = Schedule(id=str(uuid.uuid4()), **data.model_dump())
+    s = Schedule(
+        id=str(uuid.uuid4()),
+        title=data.title,
+        description=data.description,
+        start_time=datetime.fromisoformat(data.start_time) if isinstance(data.start_time, str) else data.start_time,
+        end_time=datetime.fromisoformat(data.end_time) if isinstance(data.end_time, str) else data.end_time,
+        priority=data.priority,
+        category=data.category,
+        recurring=data.recurring
+    )
     db.add(s); await db.commit(); await db.refresh(s)
     return s
 
@@ -299,3 +346,290 @@ async def delete_schedule(sid: str, db: AsyncSession = Depends(get_db)):
     if not s: raise HTTPException(404, "Not found")
     await db.delete(s); await db.commit()
     return {"message": "deleted"}
+
+async def _check_conflicts(
+    db: AsyncSession,
+    start_time: datetime,
+    end_time: datetime,
+    exclude_id: Optional[str] = None
+) -> List[Schedule]:
+    q = select(Schedule).where(
+        and_(
+            Schedule.start_time < end_time,
+            Schedule.end_time > start_time,
+            Schedule.completed == False
+        )
+    )
+    if exclude_id:
+        q = q.where(Schedule.id != exclude_id)
+    result = await db.execute(q)
+    return list(result.scalars().all())
+
+def _parse_datetime(dt_str: str) -> datetime:
+    try:
+        return datetime.fromisoformat(dt_str)
+    except ValueError:
+        dt_str = dt_str.replace('Z', '+00:00')
+        return datetime.fromisoformat(dt_str)
+
+def _schedule_to_dict(s: Schedule) -> dict:
+    return {
+        "id": s.id,
+        "title": s.title,
+        "description": s.description,
+        "start_time": s.start_time.isoformat() if isinstance(s.start_time, datetime) else s.start_time,
+        "end_time": s.end_time.isoformat() if isinstance(s.end_time, datetime) else s.end_time,
+        "priority": s.priority,
+        "category": s.category,
+        "completed": s.completed,
+        "recurring": s.recurring
+    }
+
+def _score_time_slot(
+    slot_start: datetime,
+    duration: int,
+    preferred_start: Optional[datetime],
+    priority: str,
+    existing_schedules: List[Schedule]
+) -> Tuple[int, str]:
+    score = 100
+    reasons = []
+
+    if preferred_start:
+        time_diff = abs((slot_start - preferred_start).total_seconds() / 60)
+        if time_diff <= 30:
+            score += 30
+            reasons.append("接近原定时间")
+        elif time_diff <= 60:
+            score += 15
+            reasons.append("距离原定时间较近")
+        elif time_diff <= 120:
+            score += 5
+        else:
+            score -= int(time_diff / 30) * 5
+
+    hour = slot_start.hour
+    if 9 <= hour < 12:
+        score += 20
+        reasons.append("上午高效时段")
+    elif 14 <= hour < 17:
+        score += 15
+        reasons.append("下午工作时段")
+    elif 12 <= hour < 14:
+        score -= 10
+        reasons.append("午休时段")
+    elif hour >= 22 or hour < 7:
+        score -= 30
+        reasons.append("非工作时间")
+
+    if priority == "high":
+        score += 25
+    elif priority == "medium":
+        score += 10
+
+    gap_before = None
+    gap_after = None
+    slot_end = slot_start + timedelta(minutes=duration)
+    
+    for s in existing_schedules:
+        s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
+        s_end = s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time)
+        
+        if s_end <= slot_start:
+            gap = (slot_start - s_end).total_seconds() / 60
+            if gap_before is None or gap < gap_before:
+                gap_before = gap
+        elif s_start >= slot_end:
+            gap = (s_start - slot_end).total_seconds() / 60
+            if gap_after is None or gap < gap_after:
+                gap_after = gap
+
+    if gap_before is not None and gap_before < 15:
+        score -= 10
+        reasons.append("前序日程衔接较紧")
+    elif gap_before is not None and gap_before >= 30:
+        score += 5
+        reasons.append("前序有充足准备时间")
+
+    if gap_after is not None and gap_after < 15:
+        score -= 10
+        reasons.append("后序日程衔接较紧")
+    elif gap_after is not None and gap_after >= 30:
+        score += 5
+        reasons.append("后序有充足缓冲时间")
+
+    reason_str = "、".join(reasons) if reasons else "可用时段"
+    return max(0, score), reason_str
+
+async def _generate_reschedule_options(
+    db: AsyncSession,
+    title: str,
+    preferred_start: Optional[datetime],
+    duration_minutes: int,
+    priority: str,
+    category: str,
+    target_date: datetime,
+    max_options: int = 5,
+    exclude_id: Optional[str] = None
+) -> List[RescheduleOption]:
+    day_start = datetime.combine(target_date.date(), time(7, 0))
+    day_end = datetime.combine(target_date.date(), time(23, 0))
+    duration = timedelta(minutes=duration_minutes)
+    
+    all_schedules_q = select(Schedule).where(
+        and_(
+            Schedule.start_time >= day_start - timedelta(hours=2),
+            Schedule.end_time <= day_end + timedelta(hours=2),
+            Schedule.completed == False
+        )
+    )
+    if exclude_id:
+        all_schedules_q = all_schedules_q.where(Schedule.id != exclude_id)
+    result = await db.execute(all_schedules_q)
+    all_schedules = list(result.scalars().all())
+    
+    busy_intervals: List[Tuple[datetime, datetime]] = []
+    for s in all_schedules:
+        s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
+        s_end = s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time)
+        busy_intervals.append((s_start, s_end))
+    
+    busy_intervals.sort()
+    
+    candidate_slots: List[Tuple[datetime, int, str]] = []
+    
+    current = day_start
+    idx = 0
+    while current + duration <= day_end:
+        slot_end = current + duration
+        is_free = True
+        
+        for (busy_start, busy_end) in busy_intervals:
+            if current < busy_end and slot_end > busy_start:
+                is_free = False
+                current = busy_end + timedelta(minutes=5)
+                break
+        
+        if is_free:
+            score, reason = _score_time_slot(current, duration_minutes, preferred_start, priority, all_schedules)
+            candidate_slots.append((current, score, reason))
+            current += timedelta(minutes=15)
+        else:
+            if idx < len(busy_intervals):
+                current = max(current, busy_intervals[idx][1] + timedelta(minutes=5))
+                idx += 1
+            else:
+                current += timedelta(minutes=15)
+    
+    candidate_slots.sort(key=lambda x: x[1], reverse=True)
+    
+    options: List[RescheduleOption] = []
+    for i, (slot_start, score, reason) in enumerate(candidate_slots[:max_options]):
+        slot_end = slot_start + duration
+        options.append(RescheduleOption(
+            option_id=f"option-{i+1}",
+            title=title,
+            start_time=slot_start.isoformat(),
+            end_time=slot_end.isoformat(),
+            duration_minutes=duration_minutes,
+            score=score,
+            reason=reason
+        ))
+    
+    return options
+
+@router.post("/check-conflict", response_model=ConflictInfo)
+async def check_conflict(
+    data: ConflictCheckRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    start_dt = _parse_datetime(data.start_time)
+    end_dt = _parse_datetime(data.end_time)
+    
+    conflicts = await _check_conflicts(db, start_dt, end_dt, data.exclude_id)
+    
+    if not conflicts:
+        return ConflictInfo(
+            has_conflict=False,
+            conflicting_schedules=[],
+            message="该时间段无冲突，可以安排"
+        )
+    
+    conflict_details = [_schedule_to_dict(s) for s in conflicts]
+    conflict_titles = "、".join([s['title'] for s in conflict_details])
+    
+    return ConflictInfo(
+        has_conflict=True,
+        conflicting_schedules=conflict_details,
+        message=f"该时间段与以下日程冲突：{conflict_titles}"
+    )
+
+@router.post("/reschedule-options")
+async def get_reschedule_options(
+    data: RescheduleRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    target_date_str = data.date or datetime.now().strftime("%Y-%m-%d")
+    target_date = datetime.strptime(target_date_str, "%Y-%m-%d")
+    
+    preferred_start = None
+    if data.preferred_start_time:
+        preferred_start = _parse_datetime(data.preferred_start_time)
+        target_date = preferred_start
+    
+    original_schedule = None
+    exclude_id = None
+    if data.schedule_id:
+        s = await db.get(Schedule, data.schedule_id)
+        if s:
+            original_schedule = _schedule_to_dict(s)
+            exclude_id = s.id
+            if not preferred_start:
+                s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
+                preferred_start = s_start
+    
+    options = await _generate_reschedule_options(
+        db=db,
+        title=data.title,
+        preferred_start=preferred_start,
+        duration_minutes=data.duration_minutes,
+        priority=data.priority,
+        category=data.category,
+        target_date=target_date,
+        max_options=data.max_options,
+        exclude_id=exclude_id
+    )
+    
+    return {
+        "original_schedule": original_schedule,
+        "options_count": len(options),
+        "options": [opt.model_dump() for opt in options]
+    }
+
+@router.post("/confirm-reschedule")
+async def confirm_reschedule(
+    data: RescheduleConfirmRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    s = await db.get(Schedule, data.schedule_id)
+    if not s:
+        raise HTTPException(404, "日程不存在")
+    
+    new_start = _parse_datetime(data.new_start_time)
+    new_end = _parse_datetime(data.new_end_time)
+    
+    conflicts = await _check_conflicts(db, new_start, new_end, data.schedule_id)
+    if conflicts:
+        conflict_titles = "、".join([c.title for c in conflicts])
+        raise HTTPException(400, f"新时间段仍有冲突：{conflict_titles}")
+    
+    s.start_time = new_start
+    s.end_time = new_end
+    await db.commit()
+    await db.refresh(s)
+    
+    return {
+        "message": "改期成功",
+        "schedule": _schedule_to_dict(s),
+        "option_id": data.option_id
+    }

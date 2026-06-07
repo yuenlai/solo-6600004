@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { scheduleApi } from '../services/api';
 import { useScheduleStore } from '../store/schedule';
-import { Schedule } from '../types';
+import { Schedule, ConflictInfo, RescheduleMode } from '../types';
+import { RescheduleAssistant } from './RescheduleAssistant';
 
 interface NaturalLanguageInputProps {
   onClose: () => void;
@@ -12,7 +13,43 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<Schedule[]>([]);
   const [error, setError] = useState('');
+  const [conflicts, setConflicts] = useState<Map<string, ConflictInfo>>(new Map());
+  const [showRescheduleFor, setShowRescheduleFor] = useState<{ schedule: Schedule; conflict: ConflictInfo } | null>(null);
   const { selectedDate, addSchedules } = useScheduleStore();
+
+  const getDurationMinutes = (start: string, end: string) => {
+    return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000);
+  };
+
+  const checkConflicts = async (schedules: Schedule[]) => {
+    const newConflicts = new Map<string, ConflictInfo>();
+    for (const s of schedules) {
+      try {
+        const res = await scheduleApi.checkConflict(s.startTime, s.endTime);
+        if (res.data.has_conflict) {
+          const conflictingSchedules = res.data.conflicting_schedules.map((cs: any) => ({
+            id: cs.id,
+            title: cs.title,
+            description: cs.description,
+            startTime: cs.start_time,
+            endTime: cs.end_time,
+            priority: cs.priority,
+            category: cs.category,
+            completed: cs.completed,
+            recurring: cs.recurring
+          }));
+          newConflicts.set(s.id, {
+            hasConflict: true,
+            conflictingSchedules,
+            message: res.data.message
+          });
+        }
+      } catch (e) {
+        console.error('Conflict check failed:', e);
+      }
+    }
+    setConflicts(newConflicts);
+  };
 
   const handlePreview = async () => {
     if (!text.trim()) {
@@ -21,6 +58,7 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
     }
     setLoading(true);
     setError('');
+    setConflicts(new Map());
     try {
       const res = await scheduleApi.parse(text, selectedDate);
       const schedules = res.data.schedules.map((s: any) => ({
@@ -35,11 +73,16 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
         recurring: s.recurring
       }));
       setPreview(schedules);
+      checkConflicts(schedules);
     } catch (e: any) {
       setError(e.response?.data?.detail || '解析失败，请稍后重试');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReschedule = (schedule: Schedule, conflict: ConflictInfo) => {
+    setShowRescheduleFor({ schedule, conflict });
   };
 
   const handleConfirm = async () => {
@@ -82,15 +125,16 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', zIndex: 1000
-    }} onClick={onClose}>
+    <>
       <div style={{
-        background: '#fff', borderRadius: '12px', width: '600px',
-        maxWidth: '90vw', maxHeight: '80vh', overflow: 'auto', padding: '24px'
-      }} onClick={e => e.stopPropagation()}>
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 1000
+      }} onClick={onClose}>
+        <div style={{
+          background: '#fff', borderRadius: '12px', width: '600px',
+          maxWidth: '90vw', maxHeight: '80vh', overflow: 'auto', padding: '24px'
+        }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ margin: 0, fontSize: '20px' }}>✨ 智能录入日程</h2>
           <button onClick={onClose} style={{
@@ -140,26 +184,54 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
         {preview.length > 0 && (
           <>
             <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', margin: '0 0 12px', color: '#333' }}>
-                已识别 {preview.length} 条日程：
-              </h3>
-              {preview.map((s, idx) => (
-                <div key={idx} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '10px 12px', marginBottom: '8px',
-                  background: '#f5f5f5', borderRadius: '6px', fontSize: '14px'
-                }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', margin: 0, color: '#333' }}>
+                  已识别 {preview.length} 条日程：
+                </h3>
+                {conflicts.size > 0 && (
                   <span style={{
-                    fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
-                    background: s.priority === 'high' ? '#ffcdd2' : s.priority === 'medium' ? '#fff9c4' : '#c8e6c9'
-                  }}>{s.priority === 'high' ? '高' : s.priority === 'medium' ? '中' : '低'}</span>
-                  <span style={{ color: '#1a237e', fontWeight: 500, minWidth: '110px' }}>
-                    {formatTime(s.startTime)} - {formatTime(s.endTime)}
+                    fontSize: '12px', color: '#e65100',
+                    background: '#fff3e0', padding: '4px 10px', borderRadius: '12px'
+                  }}>
+                    ⚠️ {conflicts.size} 条有冲突
                   </span>
-                  <span style={{ flex: 1 }}>{s.title}</span>
-                  <span style={{ color: '#999', fontSize: '12px' }}>{s.category}</span>
-                </div>
-              ))}
+                )}
+              </div>
+              {preview.map((s, idx) => {
+                const conflict = conflicts.get(s.id);
+                return (
+                  <div key={idx} style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '10px 12px', marginBottom: '8px',
+                    background: conflict ? '#fff3e0' : '#f5f5f5',
+                    border: conflict ? '1px solid #ff9800' : 'none',
+                    borderRadius: '6px', fontSize: '14px'
+                  }}>
+                    <span style={{
+                      fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
+                      background: s.priority === 'high' ? '#ffcdd2' : s.priority === 'medium' ? '#fff9c4' : '#c8e6c9'
+                    }}>{s.priority === 'high' ? '高' : s.priority === 'medium' ? '中' : '低'}</span>
+                    <span style={{ color: '#1a237e', fontWeight: 500, minWidth: '110px' }}>
+                      {formatTime(s.startTime)} - {formatTime(s.endTime)}
+                    </span>
+                    <span style={{ flex: 1 }}>{s.title}</span>
+                    <span style={{ color: '#999', fontSize: '12px' }}>{s.category}</span>
+                    {conflict ? (
+                      <button
+                        onClick={() => handleReschedule(s, conflict)}
+                        style={{
+                          padding: '4px 10px', fontSize: '12px',
+                          background: '#ff9800', color: '#fff',
+                          border: 'none', borderRadius: '4px', cursor: 'pointer'
+                        }}>
+                        🔄 智能改期
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '12px', color: '#4caf50' }}>✓ 无冲突</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={onClose} disabled={loading} style={{
@@ -179,5 +251,25 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
         )}
       </div>
     </div>
+      {showRescheduleFor && (
+        <RescheduleAssistant
+          mode={{
+            type: 'new',
+            title: showRescheduleFor.schedule.title,
+            durationMinutes: getDurationMinutes(showRescheduleFor.schedule.startTime, showRescheduleFor.schedule.endTime),
+            priority: showRescheduleFor.schedule.priority,
+            category: showRescheduleFor.schedule.category,
+            preferredStartTime: showRescheduleFor.schedule.startTime,
+            date: selectedDate
+          }}
+          conflictInfo={showRescheduleFor.conflict}
+          onClose={() => setShowRescheduleFor(null)}
+          onCreated={() => {
+            setShowRescheduleFor(null);
+            onClose();
+          }}
+        />
+      )}
+    </>
   );
 };
