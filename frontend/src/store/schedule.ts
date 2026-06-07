@@ -7,6 +7,7 @@ interface ScheduleState {
   habits: Habit[];
   focusSession: FocusSession | null;
   selectedDate: string;
+  viewMode: 'day' | 'week';
   loading: boolean;
   addSchedule: (s: Schedule) => void;
   addSchedules: (s: Schedule[]) => void;
@@ -18,6 +19,7 @@ interface ScheduleState {
   startFocus: (duration: number, scheduleId?: string) => void;
   endFocus: () => void;
   setSelectedDate: (date: string) => void;
+  setViewMode: (mode: 'day' | 'week') => void;
   setSchedules: (schedules: Schedule[]) => void;
   loadSchedules: (date?: string) => Promise<void>;
 }
@@ -25,6 +27,7 @@ interface ScheduleState {
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: [], habits: [], focusSession: null,
   selectedDate: new Date().toISOString().split('T')[0],
+  viewMode: 'day',
   loading: false,
   addSchedule: (s) => set({ schedules: [...get().schedules, s] }),
   addSchedules: (newSchedules) => set({ schedules: [...get().schedules, ...newSchedules] }),
@@ -95,4 +98,5 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   }),
   endFocus: () => set({ focusSession: null }),
   setSelectedDate: (date) => set({ selectedDate: date }),
+  setViewMode: (mode) => set({ viewMode: mode }),
 }));
