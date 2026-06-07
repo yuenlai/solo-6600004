@@ -127,3 +127,38 @@ export interface DailyPlan {
     completionRate: number;
   };
 }
+
+export interface TimeSlot {
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  isAvailable: boolean;
+}
+
+export interface DragState {
+  isDragging: boolean;
+  scheduleId: string | null;
+  startY: number;
+  originalStartTime: string;
+  originalEndTime: string;
+  currentStartTime: string | null;
+  currentEndTime: string | null;
+}
+
+export interface ResizeState {
+  isResizing: boolean;
+  scheduleId: string | null;
+  edge: 'top' | 'bottom' | null;
+  startY: number;
+  originalStartTime: string;
+  originalEndTime: string;
+  currentStartTime: string | null;
+  currentEndTime: string | null;
+}
+
+export interface CreateDragState {
+  isCreating: boolean;
+  startY: number;
+  startTime: string | null;
+  endTime: string | null;
+}

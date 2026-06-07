@@ -18,7 +18,7 @@ const App: React.FC = () => {
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showMorningPlanner, setShowMorningPlanner] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -112,6 +112,13 @@ const App: React.FC = () => {
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
             }}>✨ 智能录入</button>
+            <button onClick={() => setScheduleViewMode(scheduleViewMode === 'list' ? 'timeline' : 'list')} style={{
+              padding: '8px 16px', borderRadius: '20px',
+              border: scheduleViewMode === 'timeline' ? '1px solid #4caf50' : '1px solid #1a237e',
+              background: scheduleViewMode === 'timeline' ? '#e8f5e9' : '#fff',
+              color: scheduleViewMode === 'timeline' ? '#2e7d32' : '#1a237e',
+              cursor: 'pointer'
+            }}>{scheduleViewMode === 'timeline' ? '📋 列表视图' : '🖱️ 拖拽排程'}</button>
             <button onClick={handleQuickAdd} style={{
               padding: '8px 20px', borderRadius: '20px', border: 'none',
               background: '#1a237e', color: '#fff', cursor: 'pointer'

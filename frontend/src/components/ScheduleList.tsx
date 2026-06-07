@@ -4,6 +4,7 @@ import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 import { Schedule } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
 import { ChallengeCard } from './HabitChallengeCard';
+import { DragDropScheduler } from './DragDropScheduler';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -63,7 +64,7 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule })
 };
 
 export const ScheduleList: React.FC = () => {
-  const { schedules, selectedDate, viewMode, setViewMode, setSelectedDate, challenges, deleteChallenge } = useScheduleStore();
+  const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge } = useScheduleStore();
   const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
   const activeChallenges = challenges.filter(c => c.status === 'active');
 
@@ -211,38 +212,69 @@ export const ScheduleList: React.FC = () => {
           gap: '8px',
           alignItems: 'center',
         }}>
-          <span style={{ fontSize: '13px', color: '#666', marginRight: '8px' }}>视图:</span>
+          <span style={{ fontSize: '13px', color: '#666', marginRight: '8px' }}>显示:</span>
         <button
-          onClick={() => setViewMode('day')}
+          onClick={() => setScheduleViewMode('list')}
           style={{
             padding: '6px 16px',
             border: '1px solid #ddd',
             borderRadius: '16px',
-            background: viewMode === 'day' ? '#1a237e' : '#fff',
-            color: viewMode === 'day' ? '#fff' : '#333',
+            background: scheduleViewMode === 'list' ? '#1a237e' : '#fff',
+            color: scheduleViewMode === 'list' ? '#fff' : '#333',
             cursor: 'pointer',
             fontSize: '13px',
           }}
-        >日视图</button>
+        >📋 列表</button>
         <button
-          onClick={() => setViewMode('week')}
+          onClick={() => setScheduleViewMode('timeline')}
           style={{
             padding: '6px 16px',
             border: '1px solid #ddd',
             borderRadius: '16px',
-            background: viewMode === 'week' ? '#1a237e' : '#fff',
-            color: viewMode === 'week' ? '#fff' : '#333',
+            background: scheduleViewMode === 'timeline' ? '#1a237e' : '#fff',
+            color: scheduleViewMode === 'timeline' ? '#fff' : '#333',
             cursor: 'pointer',
             fontSize: '13px',
           }}
-        >周视图</button>
-        {viewMode === 'week' && (
-          <span style={{ marginLeft: '12px', fontSize: '12px', color: '#999' }}>
-            💡 点击日期可切换到日视图
-          </span>
+        >🖱️ 拖拽</button>
+        {scheduleViewMode === 'list' && (
+          <>
+            <span style={{ marginLeft: '16px', fontSize: '13px', color: '#666', marginRight: '8px' }}>时间:</span>
+            <button
+              onClick={() => setViewMode('day')}
+              style={{
+                padding: '6px 16px',
+                border: '1px solid #ddd',
+                borderRadius: '16px',
+                background: viewMode === 'day' ? '#1a237e' : '#fff',
+                color: viewMode === 'day' ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >日视图</button>
+            <button
+              onClick={() => setViewMode('week')}
+              style={{
+                padding: '6px 16px',
+                border: '1px solid #ddd',
+                borderRadius: '16px',
+                background: viewMode === 'week' ? '#1a237e' : '#fff',
+                color: viewMode === 'week' ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >周视图</button>
+            {viewMode === 'week' && (
+              <span style={{ marginLeft: '12px', fontSize: '12px', color: '#999' }}>
+                💡 点击日期可切换到日视图
+              </span>
+            )}
+          </>
         )}
       </div>
-      {viewMode === 'day' ? renderDayView() : renderWeekView()}
+      {scheduleViewMode === 'timeline' ? <DragDropScheduler /> : (
+        viewMode === 'day' ? renderDayView() : renderWeekView()
+      )}
     </div>
       {rescheduleSchedule && (
         <RescheduleAssistant

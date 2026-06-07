@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics } from '../types';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
@@ -12,15 +12,22 @@ interface ScheduleState {
   interruptionStatistics: InterruptionStatistics | null;
   selectedDate: string;
   viewMode: 'day' | 'week';
+  scheduleViewMode: 'list' | 'timeline';
   loading: boolean;
   morningPlan: MorningPlan | null;
   eveningReview: EveningReview | null;
   completionStats: CompletionStats | null;
+  conflicts: Map<string, ConflictInfo>;
   addSchedule: (s: Schedule) => void;
   addSchedules: (s: Schedule[]) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
   deleteSchedule: (id: string) => void;
   toggleComplete: (id: string) => void;
+  updateScheduleTime: (id: string, startTime: string, endTime: string) => Promise<boolean>;
+  checkScheduleConflict: (startTime: string, endTime: string, excludeId?: string) => Promise<ConflictInfo | null>;
+  setScheduleViewMode: (mode: 'list' | 'timeline') => void;
+  clearConflicts: () => void;
+  setConflict: (scheduleId: string, info: ConflictInfo) => void;
   addHabit: (h: Habit) => void;
   recordHabit: (habitId: string, date: string, value: number) => void;
   startFocus: (duration: number, scheduleId?: string) => Promise<void>;
@@ -84,13 +91,73 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   interruptionStatistics: null,
   selectedDate: new Date().toISOString().split('T')[0],
   viewMode: 'day',
+  scheduleViewMode: 'list',
   loading: false,
   morningPlan: null,
   eveningReview: null,
   completionStats: null,
+  conflicts: new Map(),
   addSchedule: (s) => set({ schedules: [...get().schedules, s] }),
   addSchedules: (newSchedules) => set({ schedules: [...get().schedules, ...newSchedules] }),
   setSchedules: (schedules) => set({ schedules }),
+  setScheduleViewMode: (mode) => set({ scheduleViewMode: mode }),
+  clearConflicts: () => set({ conflicts: new Map() }),
+  setConflict: (scheduleId, info) => {
+    const newConflicts = new Map(get().conflicts);
+    newConflicts.set(scheduleId, info);
+    set({ conflicts: newConflicts });
+  },
+  checkScheduleConflict: async (startTime, endTime, excludeId) => {
+    try {
+      const res = await scheduleApi.checkConflict(startTime, endTime, excludeId);
+      if (res.data.has_conflict) {
+        const conflictingSchedules = res.data.conflicting_schedules.map((cs: any) => ({
+          id: cs.id,
+          title: cs.title,
+          description: cs.description,
+          startTime: cs.start_time,
+          endTime: cs.end_time,
+          priority: cs.priority,
+          category: cs.category,
+          completed: cs.completed,
+          recurring: cs.recurring
+        }));
+        return {
+          hasConflict: true,
+          conflictingSchedules,
+          message: res.data.message
+        };
+      }
+      return {
+        hasConflict: false,
+        conflictingSchedules: [],
+        message: '该时间段无冲突'
+      };
+    } catch (e) {
+      console.error('Conflict check failed:', e);
+      return null;
+    }
+  },
+  updateScheduleTime: async (id, startTime, endTime) => {
+    try {
+      const conflictInfo = await get().checkScheduleConflict(startTime, endTime, id);
+      if (conflictInfo && conflictInfo.hasConflict) {
+        get().setConflict(id, conflictInfo);
+        return false;
+      }
+      await scheduleApi.update(id, { start_time: startTime, end_time: endTime });
+      set({
+        schedules: get().schedules.map(s => s.id === id ? { ...s, startTime, endTime } : s)
+      });
+      const newConflicts = new Map(get().conflicts);
+      newConflicts.delete(id);
+      set({ conflicts: newConflicts });
+      return true;
+    } catch (e) {
+      console.error('Failed to update schedule time:', e);
+      return false;
+    }
+  },
   loadSchedules: async (date) => {
     set({ loading: true });
     try {
