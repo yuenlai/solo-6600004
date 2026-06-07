@@ -9,6 +9,7 @@ import { MorningPlanner } from './components/MorningPlanner';
 import { EveningReview } from './components/EveningReview';
 import { MonthlyGoalPlanner } from './components/MonthlyGoalPlanner';
 import { MonthlyGoalProgress } from './components/MonthlyGoalProgress';
+import { ExceptionDayManager } from './components/ExceptionDayManager';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
@@ -21,7 +22,8 @@ const App: React.FC = () => {
   const [showMorningPlanner, setShowMorningPlanner] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
   const [showGoalPlanner, setShowGoalPlanner] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress } = useScheduleStore();
+  const [showExceptionDayManager, setShowExceptionDayManager] = useState(false);
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -32,7 +34,9 @@ const App: React.FC = () => {
       }
       loadHabits();
       loadChallenges();
+      loadExceptionDays();
       await loadDailyPlan(selectedDate);
+      await checkExceptionDay(selectedDate);
     };
     initData();
   }, []);
@@ -53,6 +57,7 @@ const App: React.FC = () => {
         await loadInterruptionStatistics(weekStart, weekEnd);
       }
       await loadDailyPlan(selectedDate);
+      await checkExceptionDay(selectedDate);
     };
     loadData();
   }, [selectedDate, tab, viewMode]);
@@ -97,8 +102,38 @@ const App: React.FC = () => {
       </nav>
       <main style={{ flex: 1, overflow: 'auto', background: '#f5f5f5' }}>
         <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderBottom: '1px solid #e0e0e0' }}>
-          <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }} />
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+              style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }} />
+            {checkedExceptionDay && (
+              <div style={{
+                padding: '6px 12px', borderRadius: '16px',
+                background: checkedExceptionDay.type === 'holiday' ? '#ffebee' :
+                           checkedExceptionDay.type === 'business_trip' ? '#e3f2fd' :
+                           checkedExceptionDay.type === 'rest_day' ? '#e8f5e9' : '#f3e5f5',
+                color: checkedExceptionDay.type === 'holiday' ? '#c62828' :
+                       checkedExceptionDay.type === 'business_trip' ? '#1565c0' :
+                       checkedExceptionDay.type === 'rest_day' ? '#2e7d32' : '#6a1b9a',
+                fontSize: '12px', fontWeight: 500,
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}>
+                <span>{checkedExceptionDay.type === 'holiday' ? '🎉' :
+                       checkedExceptionDay.type === 'business_trip' ? '✈️' :
+                       checkedExceptionDay.type === 'rest_day' ? '🌴' : '📅'}</span>
+                <span>{checkedExceptionDay.name}</span>
+                <button
+                  onClick={() => setShowExceptionDayManager(true)}
+                  style={{
+                    marginLeft: '4px', background: 'none', border: 'none',
+                    cursor: 'pointer', fontSize: '14px',
+                    color: checkedExceptionDay.type === 'holiday' ? '#c62828' :
+                           checkedExceptionDay.type === 'business_trip' ? '#1565c0' :
+                           checkedExceptionDay.type === 'rest_day' ? '#2e7d32' : '#6a1b9a'
+                  }}
+                >⚙️</button>
+              </div>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => setShowMorningPlanner(true)} style={{
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #ff9800',
@@ -108,6 +143,10 @@ const App: React.FC = () => {
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #7b1fa2',
               background: eveningReview ? '#f3e5f5' : '#fff', color: '#7b1fa2', cursor: 'pointer'
             }}>{eveningReview ? '🌙 已复盘' : '🌙 晚间复盘'}</button>
+            <button onClick={() => setShowExceptionDayManager(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #e65100',
+              background: '#fff', color: '#e65100', cursor: 'pointer'
+            }}>📅 例外日</button>
             <button onClick={() => setShowTemplateSelector(true)} style={{
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
@@ -148,6 +187,7 @@ const App: React.FC = () => {
       {showMorningPlanner && <MorningPlanner onClose={() => setShowMorningPlanner(false)} />}
       {showEveningReview && <EveningReview onClose={() => setShowEveningReview(false)} />}
       {showGoalPlanner && <MonthlyGoalPlanner onClose={() => { setShowGoalPlanner(false); loadMonthlyGoals(); loadMonthProgress(selectedDate.slice(0, 7)); }} />}
+      {showExceptionDayManager && <ExceptionDayManager onClose={() => { setShowExceptionDayManager(false); checkExceptionDay(selectedDate); loadSchedules(selectedDate); }} />}
     </div>
   );
 };

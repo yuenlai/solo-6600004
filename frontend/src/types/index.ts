@@ -218,3 +218,32 @@ export interface MonthlyGoalProgress {
     progress: number;
   }[];
 }
+
+export type ExceptionDayType = 'holiday' | 'business_trip' | 'rest_day' | 'custom';
+
+export interface ExceptionDayRule {
+  skipHabits: boolean;
+  habitIdsToSkip: string[];
+  skipSchedules: boolean;
+  scheduleCategoriesToSkip: string[];
+  rescheduleToNextWorkingDay: boolean;
+  adjustWorkHours: boolean;
+  workStartTime?: string;
+  workEndTime?: string;
+  note?: string;
+}
+
+export interface ExceptionDay {
+  id: string;
+  date: string;
+  type: ExceptionDayType;
+  name: string;
+  description?: string;
+  rule: ExceptionDayRule;
+  createdAt?: string;
+}
+
+export interface ExceptionDayWithDetails extends ExceptionDay {
+  affectedSchedules: Schedule[];
+  affectedHabits: Habit[];
+}

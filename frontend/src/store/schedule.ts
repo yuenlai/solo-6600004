@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction } from '../types';
-import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule } from '../types';
+import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
@@ -22,6 +22,9 @@ interface ScheduleState {
   currentGoalDetails: MonthlyGoalWithDetails | null;
   monthProgress: MonthlyGoalProgress[] | null;
   dailyActions: (DailyAction & { goalTitle: string; goalCategory: string; weeklyTitle: string })[];
+  exceptionDays: ExceptionDay[];
+  currentExceptionDay: ExceptionDayWithDetails | null;
+  checkedExceptionDay: ExceptionDay | null;
   loadMonthlyGoals: (month?: string) => Promise<void>;
   loadGoalDetails: (goalId: string) => Promise<void>;
   createMonthlyGoal: (data: { title: string; description?: string; month: string; category?: string; priority?: string }) => Promise<MonthlyGoal>;
@@ -38,6 +41,23 @@ interface ScheduleState {
   loadMonthProgress: (month: string) => Promise<void>;
   loadDailyActions: (date: string) => Promise<void>;
   setCurrentGoalDetails: (goal: MonthlyGoalWithDetails | null) => void;
+  loadExceptionDays: (startDate?: string, endDate?: string) => Promise<void>;
+  loadExceptionDay: (date: string) => Promise<void>;
+  checkExceptionDay: (date: string) => Promise<ExceptionDay | null>;
+  createExceptionDay: (data: {
+    date: string;
+    type: string;
+    name: string;
+    description?: string;
+    rule: ExceptionDayRule;
+  }) => Promise<ExceptionDay>;
+  updateExceptionDay: (id: string, data: Partial<ExceptionDay>) => Promise<void>;
+  deleteExceptionDay: (id: string) => Promise<void>;
+  applyExceptionDay: (id: string) => Promise<{
+    schedules: { processed: any[]; skipped: any[]; rescheduled: any[] };
+    habits: { skipped: any[]; kept: any[] };
+  } | null>;
+  setCurrentExceptionDay: (day: ExceptionDayWithDetails | null) => void;
   addSchedule: (s: Schedule) => void;
   addSchedules: (s: Schedule[]) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
@@ -117,6 +137,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   eveningReview: null,
   completionStats: null,
   conflicts: new Map(),
+  exceptionDays: [],
+  currentExceptionDay: null,
+  checkedExceptionDay: null,
   addSchedule: (s) => set({ schedules: [...get().schedules, s] }),
   addSchedules: (newSchedules) => set({ schedules: [...get().schedules, ...newSchedules] }),
   setSchedules: (schedules) => set({ schedules }),
@@ -924,4 +947,145 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
   setCurrentGoalDetails: (goal) => set({ currentGoalDetails: goal }),
+  loadExceptionDays: async (startDate, endDate) => {
+    set({ loading: true });
+    try {
+      const res = await exceptionDayApi.list(startDate, endDate);
+      const days: ExceptionDay[] = res.data.map((d: any) => ({
+        id: d.id,
+        date: d.date,
+        type: d.type,
+        name: d.name,
+        description: d.description,
+        rule: d.rule,
+        createdAt: d.created_at
+      }));
+      set({ exceptionDays: days });
+    } catch (e) {
+      console.error('Failed to load exception days:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadExceptionDay: async (date) => {
+    try {
+      const res = await exceptionDayApi.get(date);
+      const data = res.data;
+      const day: ExceptionDayWithDetails = {
+        id: data.id,
+        date: data.date,
+        type: data.type,
+        name: data.name,
+        description: data.description,
+        rule: data.rule,
+        createdAt: data.created_at,
+        affectedSchedules: data.affected_schedules.map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          priority: s.priority,
+          category: s.category,
+          completed: s.completed,
+          recurring: s.recurring
+        })),
+        affectedHabits: data.affected_habits.map((h: any) => ({
+          id: h.id,
+          name: h.name,
+          icon: h.icon,
+          color: h.color,
+          target: parseInt(h.target),
+          unit: h.unit,
+          currentStreak: parseInt(h.current_streak),
+          history: [],
+          reminder: h.reminder
+        }))
+      };
+      set({ currentExceptionDay: day });
+    } catch (e) {
+      console.error('Failed to load exception day:', e);
+      set({ currentExceptionDay: null });
+    }
+  },
+  checkExceptionDay: async (date) => {
+    try {
+      const res = await exceptionDayApi.check(date);
+      if (res.data.is_exception_day) {
+        const day: ExceptionDay = {
+          id: res.data.exception_day.id,
+          date: res.data.exception_day.date,
+          type: res.data.exception_day.type,
+          name: res.data.exception_day.name,
+          description: res.data.exception_day.description,
+          rule: res.data.exception_day.rule
+        };
+        set({ checkedExceptionDay: day });
+        return day;
+      }
+      set({ checkedExceptionDay: null });
+      return null;
+    } catch (e) {
+      console.error('Failed to check exception day:', e);
+      return null;
+    }
+  },
+  createExceptionDay: async (data) => {
+    try {
+      const res = await exceptionDayApi.create(data);
+      const day: ExceptionDay = {
+        id: res.data.id,
+        date: res.data.date,
+        type: res.data.type,
+        name: res.data.name,
+        description: res.data.description,
+        rule: res.data.rule,
+        createdAt: res.data.created_at
+      };
+      set({ exceptionDays: [...get().exceptionDays, day] });
+      return day;
+    } catch (e) {
+      console.error('Failed to create exception day:', e);
+      throw e;
+    }
+  },
+  updateExceptionDay: async (id, data) => {
+    try {
+      const updateData: any = {};
+      if (data.date !== undefined) updateData.date = data.date;
+      if (data.type !== undefined) updateData.type = data.type;
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.rule !== undefined) updateData.rule = data.rule;
+      
+      await exceptionDayApi.update(id, updateData);
+      set({
+        exceptionDays: get().exceptionDays.map(d => d.id === id ? { ...d, ...data } : d)
+      });
+    } catch (e) {
+      console.error('Failed to update exception day:', e);
+      throw e;
+    }
+  },
+  deleteExceptionDay: async (id) => {
+    try {
+      await exceptionDayApi.delete(id);
+      set({
+        exceptionDays: get().exceptionDays.filter(d => d.id !== id)
+      });
+    } catch (e) {
+      console.error('Failed to delete exception day:', e);
+      throw e;
+    }
+  },
+  applyExceptionDay: async (id) => {
+    try {
+      const res = await exceptionDayApi.apply(id);
+      return res.data;
+    } catch (e) {
+      console.error('Failed to apply exception day:', e);
+      return null;
+    }
+  },
+  setCurrentExceptionDay: (day) => set({ currentExceptionDay: day }),
 }));

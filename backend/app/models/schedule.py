@@ -130,3 +130,14 @@ class DailyAction(Base):
     schedule_id = Column(String, nullable=True)
     completed = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class ExceptionDay(Base):
+    __tablename__ = "exception_days"
+    id = Column(String, primary_key=True)
+    date = Column(String(10), nullable=False, unique=True)
+    type = Column(String(20), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    rule = Column(JSON, default=dict)
+    created_at = Column(DateTime, server_default=func.now())

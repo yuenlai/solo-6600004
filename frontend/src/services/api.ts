@@ -158,4 +158,47 @@ export const monthlyGoalApi = {
   getDailyActions: (date: string) => api.get(`/monthly-goals/daily/${date}`),
 };
 
+export const exceptionDayApi = {
+  list: (startDate?: string, endDate?: string) =>
+    api.get('/exception-days', { params: { start_date: startDate, end_date: endDate } }),
+  get: (date: string) => api.get(`/exception-days/${date}`),
+  check: (date: string) => api.get(`/exception-days/check/${date}`),
+  create: (data: {
+    date: string;
+    type: string;
+    name: string;
+    description?: string;
+    rule: {
+      skipHabits: boolean;
+      habitIdsToSkip: string[];
+      skipSchedules: boolean;
+      scheduleCategoriesToSkip: string[];
+      rescheduleToNextWorkingDay: boolean;
+      adjustWorkHours: boolean;
+      workStartTime?: string;
+      workEndTime?: string;
+      note?: string;
+    };
+  }) => api.post('/exception-days', data),
+  update: (id: string, data: {
+    date?: string;
+    type?: string;
+    name?: string;
+    description?: string;
+    rule?: {
+      skipHabits?: boolean;
+      habitIdsToSkip?: string[];
+      skipSchedules?: boolean;
+      scheduleCategoriesToSkip?: string[];
+      rescheduleToNextWorkingDay?: boolean;
+      adjustWorkHours?: boolean;
+      workStartTime?: string;
+      workEndTime?: string;
+      note?: string;
+    };
+  }) => api.put(`/exception-days/${id}`, data),
+  delete: (id: string) => api.delete(`/exception-days/${id}`),
+  apply: (id: string) => api.post(`/exception-days/${id}/apply`),
+};
+
 export default api;

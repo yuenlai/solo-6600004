@@ -4,10 +4,16 @@ import { HabitChallengeCreator } from './HabitChallengeCreator';
 import { HabitChallengeCard } from './HabitChallengeCard';
 
 export const HabitTracker: React.FC = () => {
-  const { habits, recordHabit, selectedDate, loadChallenges, challenges } = useScheduleStore();
+  const { habits, recordHabit, selectedDate, loadChallenges, challenges, exceptionDays, checkedExceptionDay } = useScheduleStore();
   const [showCreator, setShowCreator] = useState(false);
   const [selectedHabitId, setSelectedHabitId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<'habits' | 'challenges'>('habits');
+
+  const isHabitSkipped = (habitId: string) => {
+    if (!checkedExceptionDay?.rule?.skipHabits) return false;
+    const habitIds = checkedExceptionDay.rule.habitIdsToSkip;
+    return habitIds.length === 0 || habitIds.includes(habitId);
+  };
 
   useEffect(() => {
     loadChallenges();
@@ -67,16 +73,38 @@ export const HabitTracker: React.FC = () => {
 
       {activeTab === 'habits' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {checkedExceptionDay?.rule?.skipHabits && (
+            <div style={{
+              padding: '12px 16px', borderRadius: '8px', marginBottom: '12px',
+              background: '#fff3e0', border: '1px solid #ffcc80',
+              display: 'flex', alignItems: 'center', gap: '10px'
+            }}>
+              <span style={{ fontSize: '20px' }}>📅</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, color: '#e65100' }}>
+                  今日为例外日：{checkedExceptionDay.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#ef6c00' }}>
+                  {checkedExceptionDay.rule.habitIdsToSkip.length === 0
+                    ? '所有习惯打卡已自动跳过'
+                    : `部分习惯打卡已自动跳过（${checkedExceptionDay.rule.habitIdsToSkip.length}个）`}
+                </div>
+              </div>
+            </div>
+          )}
           {habits.map(h => {
             const todayRecord = h.history.find(r => r.date === selectedDate);
             const hasActiveChallenge = challenges.some(
               c => c.habitId === h.id && c.status === 'active'
             );
+            const skipped = isHabitSkipped(h.id);
             return (
               <div key={h.id} style={{
                 display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
-                borderRadius: '8px', background: todayRecord?.completed ? '#e8f5e9' : '#fafafa',
-                border: '1px solid #e0e0e0'
+                borderRadius: '8px',
+                background: todayRecord?.completed ? '#e8f5e9' : skipped ? '#f5f5f5' : '#fafafa',
+                border: '1px solid #e0e0e0',
+                opacity: skipped ? 0.6 : 1
               }}>
                 <span style={{ fontSize: '24px' }}>{h.icon}</span>
                 <div style={{ flex: 1 }}>
@@ -88,6 +116,14 @@ export const HabitTracker: React.FC = () => {
                         background: '#fff3e0', color: '#f57c00'
                       }}>
                         🔥 挑战中
+                      </span>
+                    )}
+                    {skipped && (
+                      <span style={{
+                        fontSize: '10px', padding: '2px 6px', borderRadius: '8px',
+                        background: '#ffebee', color: '#c62828'
+                      }}>
+                        🚫 今日跳过
                       </span>
                     )}
                   </div>
@@ -102,7 +138,8 @@ export const HabitTracker: React.FC = () => {
                       style={{
                         padding: '6px 10px', borderRadius: '16px',
                         border: '1px solid #1a237e', background: '#fff',
-                        color: '#1a237e', cursor: 'pointer', fontSize: '11px'
+                        color: '#1a237e', cursor: 'pointer', fontSize: '11px',
+                        opacity: skipped ? 0.5 : 1
                       }}
                       title="发起挑战"
                     >
@@ -110,10 +147,16 @@ export const HabitTracker: React.FC = () => {
                     </button>
                   )}
                   {!todayRecord ? (
-                    <button onClick={() => recordHabit(h.id, selectedDate, h.target)}
-                      style={{ padding: '6px 16px', borderRadius: '20px', border: 'none',
-                        background: h.color || '#4caf50', color: '#fff', cursor: 'pointer', fontSize: '13px'
-                      }}>打卡</button>
+                    <button
+                      onClick={() => !skipped && recordHabit(h.id, selectedDate, h.target)}
+                      disabled={skipped}
+                      style={{
+                        padding: '6px 16px', borderRadius: '20px', border: 'none',
+                        background: skipped ? '#bdbdbd' : (h.color || '#4caf50'),
+                        color: '#fff', cursor: skipped ? 'not-allowed' : 'pointer',
+                        fontSize: '13px'
+                      }}
+                    >{skipped ? '已跳过' : '打卡'}</button>
                   ) : <span style={{ color: '#4caf50', fontSize: '13px' }}>✓ 已完成</span>}
                 </div>
               </div>
