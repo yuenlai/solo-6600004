@@ -91,4 +91,18 @@ export const dailyPlanApi = {
   }) => api.put(`/daily-plans/evening/${date}`, data),
 };
 
+export const focusSessionApi = {
+  list: (date?: string) => api.get('/focus-sessions', { params: { date } }),
+  listByRange: (startDate: string, endDate: string) =>
+    api.get('/focus-sessions', { params: { start_date: startDate, end_date: endDate } }),
+  get: (id: string) => api.get(`/focus-sessions/${id}`),
+  create: (data: { duration: number; start_time: string; schedule_id?: string }) =>
+    api.post('/focus-sessions', data),
+  update: (id: string, data: { end_time?: string; completed?: boolean; interrupted?: boolean }) =>
+    api.put(`/focus-sessions/${id}`, data),
+  delete: (id: string) => api.delete(`/focus-sessions/${id}`),
+  getInterruptionStatistics: (startDate: string, endDate: string) =>
+    api.get('/focus-sessions/statistics/interruptions', { params: { start_date: startDate, end_date: endDate } }),
+};
+
 export default api;

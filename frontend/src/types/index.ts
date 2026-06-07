@@ -17,6 +17,13 @@ export interface HabitRecord {
 export interface FocusSession {
   id: string; duration: number; startTime: string;
   endTime?: string; scheduleId?: string; completed: boolean;
+  interrupted: boolean;
+}
+
+export interface InterruptionStatistics {
+  totalInterruptions: number;
+  hourlyDistribution: Record<number, number>;
+  sessions: FocusSession[];
 }
 
 export interface WeeklyReport {

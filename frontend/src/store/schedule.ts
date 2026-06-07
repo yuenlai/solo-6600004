@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats } from '../types';
-import { scheduleApi, challengeApi, habitApi, dailyPlanApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics } from '../types';
+import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
@@ -8,6 +8,8 @@ interface ScheduleState {
   habits: Habit[];
   challenges: HabitChallenge[];
   focusSession: FocusSession | null;
+  focusSessions: FocusSession[];
+  interruptionStatistics: InterruptionStatistics | null;
   selectedDate: string;
   viewMode: 'day' | 'week';
   loading: boolean;
@@ -21,8 +23,13 @@ interface ScheduleState {
   toggleComplete: (id: string) => void;
   addHabit: (h: Habit) => void;
   recordHabit: (habitId: string, date: string, value: number) => void;
-  startFocus: (duration: number, scheduleId?: string) => void;
+  startFocus: (duration: number, scheduleId?: string) => Promise<void>;
+  completeFocus: () => Promise<void>;
+  interruptFocus: () => Promise<void>;
   endFocus: () => void;
+  loadFocusSessions: (date?: string) => Promise<void>;
+  loadFocusSessionsByRange: (startDate: string, endDate: string) => Promise<void>;
+  loadInterruptionStatistics: (startDate: string, endDate: string) => Promise<void>;
   setSelectedDate: (date: string) => void;
   setViewMode: (mode: 'day' | 'week') => void;
   setSchedules: (schedules: Schedule[]) => void;
@@ -73,6 +80,8 @@ interface ScheduleState {
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
   schedules: [], habits: [], challenges: [], focusSession: null,
+  focusSessions: [],
+  interruptionStatistics: null,
   selectedDate: new Date().toISOString().split('T')[0],
   viewMode: 'day',
   loading: false,
@@ -168,10 +177,117 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       currentStreak: h.currentStreak + 1
     } : h)
   }),
-  startFocus: (duration, scheduleId) => set({
-    focusSession: { id: Date.now().toString(), duration, startTime: new Date().toISOString(), scheduleId, completed: false }
-  }),
+  startFocus: async (duration, scheduleId) => {
+    try {
+      const startTime = new Date().toISOString();
+      const res = await focusSessionApi.create({
+        duration,
+        start_time: startTime,
+        schedule_id: scheduleId
+      });
+      const session: FocusSession = {
+        id: res.data.id,
+        duration: res.data.duration,
+        startTime: res.data.start_time,
+        endTime: res.data.end_time,
+        scheduleId: res.data.schedule_id,
+        completed: res.data.completed,
+        interrupted: res.data.interrupted
+      };
+      set({ focusSession: session });
+    } catch (e) {
+      console.error('Failed to start focus session:', e);
+    }
+  },
+  completeFocus: async () => {
+    const { focusSession } = get();
+    if (!focusSession) return;
+    try {
+      const endTime = new Date().toISOString();
+      await focusSessionApi.update(focusSession.id, {
+        end_time: endTime,
+        completed: true,
+        interrupted: false
+      });
+      set({ focusSession: null });
+      await get().loadFocusSessions();
+    } catch (e) {
+      console.error('Failed to complete focus session:', e);
+    }
+  },
+  interruptFocus: async () => {
+    const { focusSession } = get();
+    if (!focusSession) return;
+    try {
+      const endTime = new Date().toISOString();
+      await focusSessionApi.update(focusSession.id, {
+        end_time: endTime,
+        completed: false,
+        interrupted: true
+      });
+      set({ focusSession: null });
+      await get().loadFocusSessions();
+    } catch (e) {
+      console.error('Failed to interrupt focus session:', e);
+    }
+  },
   endFocus: () => set({ focusSession: null }),
+  loadFocusSessions: async (date) => {
+    try {
+      const targetDate = date || get().selectedDate;
+      const res = await focusSessionApi.list(targetDate);
+      const sessions: FocusSession[] = res.data.map((s: any) => ({
+        id: s.id,
+        duration: s.duration,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        scheduleId: s.schedule_id,
+        completed: s.completed,
+        interrupted: s.interrupted
+      }));
+      set({ focusSessions: sessions });
+    } catch (e) {
+      console.error('Failed to load focus sessions:', e);
+    }
+  },
+  loadFocusSessionsByRange: async (startDate, endDate) => {
+    try {
+      const res = await focusSessionApi.listByRange(startDate, endDate);
+      const sessions: FocusSession[] = res.data.map((s: any) => ({
+        id: s.id,
+        duration: s.duration,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        scheduleId: s.schedule_id,
+        completed: s.completed,
+        interrupted: s.interrupted
+      }));
+      set({ focusSessions: sessions });
+    } catch (e) {
+      console.error('Failed to load focus sessions by range:', e);
+    }
+  },
+  loadInterruptionStatistics: async (startDate, endDate) => {
+    try {
+      const res = await focusSessionApi.getInterruptionStatistics(startDate, endDate);
+      const stats: InterruptionStatistics = {
+        totalInterruptions: res.data.total_interruptions,
+        hourlyDistribution: res.data.hourly_distribution,
+        sessions: res.data.sessions.map((s: any) => ({
+          id: s.id,
+          duration: s.duration,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          scheduleId: s.schedule_id,
+          completed: s.completed,
+          interrupted: s.interrupted
+        }))
+      };
+      set({ interruptionStatistics: stats });
+    } catch (e) {
+      console.error('Failed to load interruption statistics:', e);
+    }
+  },
   setSelectedDate: (date) => set({ selectedDate: date }),
   setViewMode: (mode) => set({ viewMode: mode }),
   loadHabits: async () => {

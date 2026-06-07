@@ -10,6 +10,7 @@ import { EveningReview } from './components/EveningReview';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
+import { getWeekStartDate, addDays, formatDate } from './data/weekTemplates';
 
 const App: React.FC = () => {
   const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
@@ -17,7 +18,7 @@ const App: React.FC = () => {
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showMorningPlanner, setShowMorningPlanner] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -41,6 +42,12 @@ const App: React.FC = () => {
         } else {
           await loadSchedules(selectedDate);
         }
+      }
+      if (tab === 'focus') {
+        await loadFocusSessions(selectedDate);
+        const weekStart = formatDate(getWeekStartDate(new Date(selectedDate)));
+        const weekEnd = formatDate(addDays(getWeekStartDate(new Date(selectedDate)), 6));
+        await loadInterruptionStatistics(weekStart, weekEnd);
       }
       await loadDailyPlan(selectedDate);
     };
