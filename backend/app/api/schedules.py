@@ -18,6 +18,7 @@ class ScheduleCreate(BaseModel):
 class BatchScheduleCreate(BaseModel):
     text: str
     date: Optional[str] = None
+    save: bool = True
 
 class ParsedSchedule(BaseModel):
     title: str; start_time: str; end_time: str
@@ -175,25 +176,51 @@ async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_d
     db.add(s); await db.commit(); await db.refresh(s)
     return s
 
-@router.put("/{sid}")
-async def update_schedule(sid: str, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)):
-    s = await db.get(Schedule, sid)
-    if not s: raise HTTPException(404, "Not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(s, k, v)
-    await db.commit(); await db.refresh(s)
-    return s
-
-@router.delete("/{sid}")
-async def delete_schedule(sid: str, db: AsyncSession = Depends(get_db)):
-    s = await db.get(Schedule, sid)
-    if not s: raise HTTPException(404, "Not found")
-    await db.delete(s); await db.commit()
-    return {"message": "deleted"}
+@router.post("/parse")
+async def parse_schedules(data: BatchScheduleCreate, db: AsyncSession = Depends(get_db)):
+    target_date = data.date or datetime.now().strftime("%Y-%m-%d")
+    parsed = parse_natural_language(data.text, target_date)
+    
+    return {
+        "parsed_count": len(parsed),
+        "schedules": [
+            {
+                "id": f"temp-{i}",
+                "title": ps.title,
+                "description": ps.description,
+                "start_time": ps.start_time,
+                "end_time": ps.end_time,
+                "priority": ps.priority,
+                "category": ps.category,
+                "completed": False
+            }
+            for i, ps in enumerate(parsed)
+        ]
+    }
 
 @router.post("/batch-parse")
 async def batch_parse_schedules(data: BatchScheduleCreate, db: AsyncSession = Depends(get_db)):
     target_date = data.date or datetime.now().strftime("%Y-%m-%d")
     parsed = parse_natural_language(data.text, target_date)
+    
+    if not data.save:
+        return {
+            "parsed_count": len(parsed),
+            "created_count": 0,
+            "schedules": [
+                {
+                    "id": f"temp-{i}",
+                    "title": ps.title,
+                    "description": ps.description,
+                    "start_time": ps.start_time,
+                    "end_time": ps.end_time,
+                    "priority": ps.priority,
+                    "category": ps.category,
+                    "completed": False
+                }
+                for i, ps in enumerate(parsed)
+            ]
+        }
     
     created = []
     for ps in parsed:
@@ -219,3 +246,45 @@ async def batch_parse_schedules(data: BatchScheduleCreate, db: AsyncSession = De
         "created_count": len(created),
         "schedules": created
     }
+
+@router.post("/batch-create")
+async def batch_create_schedules(data: List[ScheduleCreate], db: AsyncSession = Depends(get_db)):
+    created = []
+    for sc in data:
+        s = Schedule(
+            id=str(uuid.uuid4()),
+            title=sc.title,
+            description=sc.description,
+            start_time=datetime.fromisoformat(sc.start_time) if isinstance(sc.start_time, str) else sc.start_time,
+            end_time=datetime.fromisoformat(sc.end_time) if isinstance(sc.end_time, str) else sc.end_time,
+            priority=sc.priority,
+            category=sc.category,
+            recurring=sc.recurring
+        )
+        db.add(s)
+        created.append(s)
+    
+    if created:
+        await db.commit()
+        for s in created:
+            await db.refresh(s)
+    
+    return {
+        "created_count": len(created),
+        "schedules": created
+    }
+
+@router.put("/{sid}")
+async def update_schedule(sid: str, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)):
+    s = await db.get(Schedule, sid)
+    if not s: raise HTTPException(404, "Not found")
+    for k, v in data.model_dump(exclude_unset=True).items(): setattr(s, k, v)
+    await db.commit(); await db.refresh(s)
+    return s
+
+@router.delete("/{sid}")
+async def delete_schedule(sid: str, db: AsyncSession = Depends(get_db)):
+    s = await db.get(Schedule, sid)
+    if not s: raise HTTPException(404, "Not found")
+    await db.delete(s); await db.commit()
+    return {"message": "deleted"}

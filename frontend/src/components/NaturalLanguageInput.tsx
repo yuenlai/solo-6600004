@@ -22,7 +22,7 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
     setLoading(true);
     setError('');
     try {
-      const res = await scheduleApi.batchParse(text, selectedDate);
+      const res = await scheduleApi.parse(text, selectedDate);
       const schedules = res.data.schedules.map((s: any) => ({
         id: s.id,
         title: s.title,
@@ -42,10 +42,38 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
     }
   };
 
-  const handleConfirm = () => {
-    if (preview.length > 0) {
-      addSchedules(preview);
+  const handleConfirm = async () => {
+    if (preview.length === 0) return;
+    
+    setLoading(true);
+    setError('');
+    try {
+      const data = preview.map(s => ({
+        title: s.title,
+        description: s.description,
+        start_time: s.startTime,
+        end_time: s.endTime,
+        priority: s.priority,
+        category: s.category
+      }));
+      const res = await scheduleApi.batchCreate(data);
+      const createdSchedules = res.data.schedules.map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        priority: s.priority,
+        category: s.category,
+        completed: s.completed,
+        recurring: s.recurring
+      }));
+      addSchedules(createdSchedules);
       onClose();
+    } catch (e: any) {
+      setError(e.response?.data?.detail || '保存失败，请稍后重试');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -134,16 +162,18 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
               ))}
             </div>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={onClose} style={{
+              <button onClick={onClose} disabled={loading} style={{
                 flex: 1, padding: '10px 20px', borderRadius: '8px',
                 border: '1px solid #ddd', background: '#fff', color: '#666',
-                cursor: 'pointer', fontSize: '14px'
+                cursor: loading ? 'not-allowed' : 'pointer', fontSize: '14px',
+                opacity: loading ? 0.6 : 1
               }}>取消</button>
-              <button onClick={handleConfirm} style={{
+              <button onClick={handleConfirm} disabled={loading} style={{
                 flex: 1, padding: '10px 20px', borderRadius: '8px',
                 border: 'none', background: '#4caf50', color: '#fff',
-                cursor: 'pointer', fontSize: '14px'
-              }}>✅ 确认添加</button>
+                cursor: loading ? 'not-allowed' : 'pointer', fontSize: '14px',
+                opacity: loading ? 0.6 : 1
+              }}>{loading ? '保存中...' : '✅ 确认添加'}</button>
             </div>
           </>
         )}

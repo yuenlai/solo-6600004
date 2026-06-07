@@ -1,25 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScheduleList } from './components/ScheduleList';
 import { HabitTracker } from './components/HabitTracker';
 import { PomodoroTimer } from './components/PomodoroTimer';
 import { WeeklyChart } from './components/WeeklyChart';
 import { NaturalLanguageInput } from './components/NaturalLanguageInput';
 import { useScheduleStore } from './store/schedule';
+import { scheduleApi } from './services/api';
 import { Schedule } from './types';
 
 const App: React.FC = () => {
   const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
   const [showSmartInput, setShowSmartInput] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, loadSchedules } = useScheduleStore();
 
-  const handleQuickAdd = () => {
+  useEffect(() => {
+    loadSchedules();
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'schedule') {
+      loadSchedules(selectedDate);
+    }
+  }, [selectedDate, tab]);
+
+  const handleQuickAdd = async () => {
     const title = prompt('日程标题:');
     if (title) {
-      addSchedule({
-        id: Date.now().toString(), title, description: '', priority: 'medium',
-        category: '工作', completed: false,
-        startTime: `${selectedDate}T09:00:00`, endTime: `${selectedDate}T10:00:00`
-      } as Schedule);
+      try {
+        const res = await scheduleApi.create({
+          title, description: '', priority: 'medium',
+          category: '工作',
+          start_time: `${selectedDate}T09:00:00`, end_time: `${selectedDate}T10:00:00`
+        });
+        const s = res.data;
+        addSchedule({
+          id: s.id, title: s.title, description: s.description, priority: s.priority,
+          category: s.category, completed: s.completed,
+          startTime: s.start_time, endTime: s.end_time,
+          recurring: s.recurring
+        } as Schedule);
+      } catch (e) {
+        console.error('Failed to create schedule:', e);
+        alert('创建日程失败，请稍后重试');
+      }
     }
   };
 

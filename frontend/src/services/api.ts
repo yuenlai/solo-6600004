@@ -5,7 +5,9 @@ export const scheduleApi = {
   create: (data: any) => api.post('/schedules', data),
   update: (id: string, data: any) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
-  batchParse: (text: string, date?: string) => api.post('/schedules/batch-parse', { text, date }),
+  parse: (text: string, date?: string) => api.post('/schedules/parse', { text, date }),
+  batchCreate: (data: any[]) => api.post('/schedules/batch-create', data),
+  batchParse: (text: string, date?: string, save?: boolean) => api.post('/schedules/batch-parse', { text, date, save }),
 };
 export const habitApi = {
   list: () => api.get('/habits'),

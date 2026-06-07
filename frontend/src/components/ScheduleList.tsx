@@ -1,5 +1,4 @@
 import React from 'react';
-import { Schedule } from '../types';
 import { useScheduleStore } from '../store/schedule';
 
 export const ScheduleList: React.FC = () => {

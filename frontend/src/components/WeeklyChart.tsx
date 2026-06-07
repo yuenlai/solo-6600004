@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const mockData = [
   { day: '周一', completed: 5, total: 7 }, { day: '周二', completed: 6, total: 8 },
@@ -7,8 +7,6 @@ const mockData = [
   { day: '周五', completed: 5, total: 5 }, { day: '周六', completed: 3, total: 4 },
   { day: '周日', completed: 2, total: 3 },
 ];
-
-const COLORS = ['#4caf50', '#2196f3', '#ff9800', '#e91e63', '#9c27b0'];
 
 export const WeeklyChart: React.FC = () => (
   <div style={{ padding: '16px' }}>
