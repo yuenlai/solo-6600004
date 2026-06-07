@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary } from '../types';
-import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare } from '../types';
+import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
@@ -60,6 +60,19 @@ interface ScheduleState {
     habits: { skipped: any[]; kept: any[] };
   } | null>;
   setCurrentExceptionDay: (day: ExceptionDayWithDetails | null) => void;
+  currentUser: string;
+  outgoingShares: ScheduleShare[];
+  incomingShares: ScheduleShare[];
+  acceptedShares: ScheduleShare[];
+  setCurrentUser: (name: string) => void;
+  shareSchedule: (scheduleId: string, sharedWith: string, message?: string) => Promise<ScheduleShare | null>;
+  acceptShare: (token: string) => Promise<boolean>;
+  rejectShare: (token: string) => Promise<boolean>;
+  cancelShare: (shareId: string) => Promise<boolean>;
+  loadOutgoingShares: () => Promise<void>;
+  loadIncomingShares: () => Promise<void>;
+  loadAcceptedShares: () => Promise<void>;
+  syncSharedSchedules: () => Promise<number>;
   addSchedule: (s: Schedule) => void;
   addSchedules: (s: Schedule[]) => void;
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
@@ -147,6 +160,187 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   exceptionDays: [],
   currentExceptionDay: null,
   checkedExceptionDay: null,
+  currentUser: localStorage.getItem('currentUser') || '我',
+  outgoingShares: [],
+  incomingShares: [],
+  acceptedShares: [],
+  setCurrentUser: (name) => {
+    localStorage.setItem('currentUser', name);
+    set({ currentUser: name });
+  },
+  shareSchedule: async (scheduleId, sharedWith, message = '') => {
+    try {
+      const currentUser = get().currentUser;
+      const res = await shareApi.create({
+        schedule_id: scheduleId,
+        owner_name: currentUser,
+        shared_with: sharedWith,
+        message
+      });
+      const share: ScheduleShare = {
+        id: res.data.id,
+        scheduleId: res.data.schedule_id,
+        ownerName: res.data.owner_name,
+        sharedWith: res.data.shared_with,
+        shareToken: res.data.share_token,
+        status: res.data.status,
+        message: res.data.message,
+        createdAt: res.data.created_at,
+        updatedAt: res.data.updated_at
+      };
+      await get().loadOutgoingShares();
+      return share;
+    } catch (e) {
+      console.error('Failed to share schedule:', e);
+      return null;
+    }
+  },
+  acceptShare: async (token) => {
+    try {
+      const currentUser = get().currentUser;
+      await shareApi.accept(token, currentUser);
+      await get().loadIncomingShares();
+      await get().loadSchedules();
+      await get().loadAcceptedShares();
+      return true;
+    } catch (e) {
+      console.error('Failed to accept share:', e);
+      return false;
+    }
+  },
+  rejectShare: async (token) => {
+    try {
+      const currentUser = get().currentUser;
+      await shareApi.reject(token, currentUser);
+      await get().loadIncomingShares();
+      return true;
+    } catch (e) {
+      console.error('Failed to reject share:', e);
+      return false;
+    }
+  },
+  cancelShare: async (shareId) => {
+    try {
+      const currentUser = get().currentUser;
+      await shareApi.cancel(shareId, currentUser);
+      await get().loadOutgoingShares();
+      await get().loadAcceptedShares();
+      return true;
+    } catch (e) {
+      console.error('Failed to cancel share:', e);
+      return false;
+    }
+  },
+  loadOutgoingShares: async () => {
+    try {
+      const currentUser = get().currentUser;
+      const res = await shareApi.getOutgoing(currentUser);
+      const shares: ScheduleShare[] = res.data.shares.map((s: any) => ({
+        id: s.id,
+        scheduleId: s.schedule_id,
+        ownerName: s.owner_name,
+        sharedWith: s.shared_with,
+        shareToken: s.share_token,
+        status: s.status,
+        message: s.message,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        schedule: s.schedule ? {
+          id: s.schedule.id,
+          title: s.schedule.title,
+          description: s.schedule.description,
+          startTime: s.schedule.start_time,
+          endTime: s.schedule.end_time,
+          priority: s.schedule.priority,
+          category: s.schedule.category,
+          completed: s.schedule.completed,
+          recurring: s.schedule.recurring,
+          shareId: s.schedule.share_id,
+          sharedFrom: s.schedule.shared_from
+        } : undefined
+      }));
+      set({ outgoingShares: shares });
+    } catch (e) {
+      console.error('Failed to load outgoing shares:', e);
+    }
+  },
+  loadIncomingShares: async () => {
+    try {
+      const currentUser = get().currentUser;
+      const res = await shareApi.getIncoming(currentUser);
+      const shares: ScheduleShare[] = res.data.shares.map((s: any) => ({
+        id: s.id,
+        scheduleId: s.schedule_id,
+        ownerName: s.owner_name,
+        sharedWith: s.shared_with,
+        shareToken: s.share_token,
+        status: s.status,
+        message: s.message,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        schedule: s.schedule ? {
+          id: s.schedule.id,
+          title: s.schedule.title,
+          description: s.schedule.description,
+          startTime: s.schedule.start_time,
+          endTime: s.schedule.end_time,
+          priority: s.schedule.priority,
+          category: s.schedule.category,
+          completed: s.schedule.completed,
+          recurring: s.schedule.recurring,
+          shareId: s.schedule.share_id,
+          sharedFrom: s.schedule.shared_from
+        } : undefined
+      }));
+      set({ incomingShares: shares });
+    } catch (e) {
+      console.error('Failed to load incoming shares:', e);
+    }
+  },
+  loadAcceptedShares: async () => {
+    try {
+      const currentUser = get().currentUser;
+      const res = await shareApi.getAccepted(currentUser);
+      const shares: ScheduleShare[] = res.data.shares.map((s: any) => ({
+        id: s.id,
+        scheduleId: s.schedule_id,
+        ownerName: s.owner_name,
+        sharedWith: s.shared_with,
+        shareToken: s.share_token,
+        status: s.status,
+        message: s.message,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        schedule: s.schedule ? {
+          id: s.schedule.id,
+          title: s.schedule.title,
+          description: s.schedule.description,
+          startTime: s.schedule.start_time,
+          endTime: s.schedule.end_time,
+          priority: s.schedule.priority,
+          category: s.schedule.category,
+          completed: s.schedule.completed,
+          recurring: s.schedule.recurring,
+          shareId: s.schedule.share_id,
+          sharedFrom: s.schedule.shared_from
+        } : undefined
+      }));
+      set({ acceptedShares: shares });
+    } catch (e) {
+      console.error('Failed to load accepted shares:', e);
+    }
+  },
+  syncSharedSchedules: async () => {
+    try {
+      const currentUser = get().currentUser;
+      const res = await shareApi.sync(currentUser);
+      await get().loadSchedules();
+      return res.data.updated_count || 0;
+    } catch (e) {
+      console.error('Failed to sync shared schedules:', e);
+      return 0;
+    }
+  },
   addSchedule: (s) => set({ schedules: [...get().schedules, s] }),
   addSchedules: (newSchedules) => set({ schedules: [...get().schedules, ...newSchedules] }),
   setSchedules: (schedules) => set({ schedules }),
@@ -222,7 +416,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         priority: s.priority,
         category: s.category,
         completed: s.completed,
-        recurring: s.recurring
+        recurring: s.recurring,
+        shareId: s.share_id,
+        sharedFrom: s.shared_from
       }));
       set({ schedules });
     } catch (e) {
@@ -247,7 +443,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         priority: s.priority,
         category: s.category,
         completed: s.completed,
-        recurring: s.recurring
+        recurring: s.recurring,
+        shareId: s.share_id,
+        sharedFrom: s.shared_from
       }));
       set({ schedules });
     } catch (e) {
@@ -562,6 +760,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         category: s.category,
         completed: s.completed,
         recurring: s.recurring,
+        shareId: s.share_id,
+        sharedFrom: s.shared_from
       }));
       
       set({ schedules });

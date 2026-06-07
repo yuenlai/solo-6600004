@@ -10,6 +10,7 @@ import { EveningReview } from './components/EveningReview';
 import { MonthlyGoalPlanner } from './components/MonthlyGoalPlanner';
 import { MonthlyGoalProgress } from './components/MonthlyGoalProgress';
 import { ExceptionDayManager } from './components/ExceptionDayManager';
+import { ShareManager } from './components/ShareManager';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
@@ -23,7 +24,8 @@ const App: React.FC = () => {
   const [showEveningReview, setShowEveningReview] = useState(false);
   const [showGoalPlanner, setShowGoalPlanner] = useState(false);
   const [showExceptionDayManager, setShowExceptionDayManager] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays } = useScheduleStore();
+  const [showShareManager, setShowShareManager] = useState(false);
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays, incomingShares, loadIncomingShares, loadOutgoingShares, loadAcceptedShares } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -37,6 +39,9 @@ const App: React.FC = () => {
       loadHabits();
       loadChallenges();
       loadExceptionDays();
+      loadIncomingShares();
+      loadOutgoingShares();
+      loadAcceptedShares();
       await loadDailyPlan(selectedDate);
       await checkExceptionDay(selectedDate);
     };
@@ -151,6 +156,24 @@ const App: React.FC = () => {
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #e65100',
               background: '#fff', color: '#e65100', cursor: 'pointer'
             }}>📅 例外日</button>
+            <button onClick={() => setShowShareManager(true)} style={{
+              padding: '8px 16px', borderRadius: '20px', border: '1px solid #2196f3',
+              background: incomingShares.length > 0 ? '#e3f2fd' : '#fff',
+              color: '#1976d2', cursor: 'pointer',
+              position: 'relative'
+            }}>
+              🔗 共享计划
+              {incomingShares.length > 0 && (
+                <span style={{
+                  position: 'absolute', top: '-4px', right: '-4px',
+                  background: '#f44336', color: '#fff',
+                  fontSize: '10px', padding: '1px 5px',
+                  borderRadius: '8px', minWidth: '16px', textAlign: 'center'
+                }}>
+                  {incomingShares.length}
+                </span>
+              )}
+            </button>
             <button onClick={() => setShowTemplateSelector(true)} style={{
               padding: '8px 16px', borderRadius: '20px', border: '1px solid #1a237e',
               background: '#fff', color: '#1a237e', cursor: 'pointer'
@@ -192,6 +215,7 @@ const App: React.FC = () => {
       {showEveningReview && <EveningReview onClose={() => setShowEveningReview(false)} />}
       {showGoalPlanner && <MonthlyGoalPlanner onClose={() => { setShowGoalPlanner(false); loadMonthlyGoals(); loadMonthProgress(selectedDate.slice(0, 7)); }} />}
       {showExceptionDayManager && <ExceptionDayManager onClose={() => { setShowExceptionDayManager(false); checkExceptionDay(selectedDate); loadSchedules(selectedDate); }} />}
+      {showShareManager && <ShareManager onClose={() => { setShowShareManager(false); loadSchedules(selectedDate); }} />}
     </div>
   );
 };

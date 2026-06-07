@@ -2,6 +2,22 @@ export interface Schedule {
   id: string; title: string; description: string;
   startTime: string; endTime: string; priority: 'low' | 'medium' | 'high';
   category: string; completed: boolean; recurring?: string;
+  shareId?: string; sharedFrom?: string;
+}
+
+export type ShareStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface ScheduleShare {
+  id: string;
+  scheduleId: string;
+  ownerName: string;
+  sharedWith: string;
+  shareToken: string;
+  status: ShareStatus;
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+  schedule?: Schedule;
 }
 
 export interface Habit {

@@ -6,19 +6,6 @@ import enum
 class Priority(str, enum.Enum):
     low = "low"; medium = "medium"; high = "high"
 
-class Schedule(Base):
-    __tablename__ = "schedules"
-    id = Column(String, primary_key=True)
-    title = Column(String(255), nullable=False)
-    description = Column(Text, default="")
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
-    priority = Column(String(10), default="medium")
-    category = Column(String(100), default="工作")
-    completed = Column(Boolean, default=False)
-    recurring = Column(String(50), nullable=True)
-    created_at = Column(DateTime, server_default=func.now())
-
 class Habit(Base):
     __tablename__ = "habits"
     id = Column(String, primary_key=True)
@@ -140,4 +127,39 @@ class ExceptionDay(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, default="")
     rule = Column(JSON, default=dict)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ShareStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
+
+
+class ScheduleShare(Base):
+    __tablename__ = "schedule_shares"
+    id = Column(String, primary_key=True)
+    schedule_id = Column(String, nullable=False)
+    owner_name = Column(String(100), nullable=False)
+    shared_with = Column(String(100), nullable=False)
+    share_token = Column(String(100), unique=True, nullable=False)
+    status = Column(String(20), default="pending")
+    message = Column(Text, default="")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+    id = Column(String, primary_key=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    priority = Column(String(10), default="medium")
+    category = Column(String(100), default="工作")
+    completed = Column(Boolean, default=False)
+    recurring = Column(String(50), nullable=True)
+    share_id = Column(String, nullable=True)
+    shared_from = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())

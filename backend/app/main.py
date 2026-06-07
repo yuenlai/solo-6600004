@@ -8,6 +8,7 @@ from .api.daily_plans import router as daily_plans_router
 from .api.focus_sessions import router as focus_sessions_router
 from .api.monthly_goals import router as monthly_goals_router
 from .api.exception_days import router as exception_days_router
+from .api.schedule_shares import router as schedule_shares_router
 
 app = FastAPI(title="Smart Schedule Planner API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -18,6 +19,7 @@ app.include_router(daily_plans_router, prefix="/api")
 app.include_router(focus_sessions_router, prefix="/api")
 app.include_router(monthly_goals_router, prefix="/api")
 app.include_router(exception_days_router, prefix="/api")
+app.include_router(schedule_shares_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup(): await init_db()

@@ -6,6 +6,7 @@ import { RescheduleAssistant } from './RescheduleAssistant';
 import { ChallengeCard } from './HabitChallengeCard';
 import { DragDropScheduler } from './DragDropScheduler';
 import { MultiDayView } from './MultiDayView';
+import { ShareScheduleDialog } from './ShareScheduleDialog';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -13,28 +14,45 @@ interface ScheduleItemProps {
   s: Schedule;
   compact?: boolean;
   onReschedule: (schedule: Schedule) => void;
+  onShare: (schedule: Schedule) => void;
 }
 
-const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule }) => {
+const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule, onShare }) => {
   const { toggleComplete, deleteSchedule } = useScheduleStore();
+  const isShared = !!s.sharedFrom;
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: compact ? '6px' : '12px',
       padding: compact ? '6px 8px' : '12px',
       marginBottom: '6px', borderRadius: '6px',
-      background: s.completed ? '#e8f5e9' : '#fff',
-      border: '1px solid #e0e0e0',
-      textDecoration: s.completed ? 'line-through' : 'none'
+      background: s.completed ? '#e8f5e9' : isShared ? '#f0f7ff' : '#fff',
+      border: isShared ? '1px solid #2196f3' : '1px solid #e0e0e0',
+      textDecoration: s.completed ? 'line-through' : 'none',
+      position: 'relative'
     }}>
+      {isShared && !compact && (
+        <div style={{
+          position: 'absolute', top: '-8px', right: '8px',
+          fontSize: '10px', padding: '1px 6px', borderRadius: '8px',
+          background: '#2196f3', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: '2px'
+        }}>
+          🔗 来自 {s.sharedFrom}
+        </div>
+      )}
       <input type="checkbox" checked={s.completed} onChange={() => toggleComplete(s.id)}
         style={compact ? { transform: 'scale(0.8)' } : {}} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 500, fontSize: compact ? '12px' : '14px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {isShared && compact && <span style={{ fontSize: '10px' }}>🔗</span>}
           {s.title}
         </div>
         <div style={{ fontSize: '11px', color: '#666' }}>
           {s.startTime.split('T')[1]?.substring(0,5)} - {s.endTime?.split('T')[1]?.substring(0,5)}
+          {isShared && compact && <span style={{ marginLeft: '6px', color: '#2196f3' }}>· 共享</span>}
         </div>
       </div>
       {!compact && (
@@ -42,6 +60,19 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule })
           fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
           background: s.priority === 'high' ? '#ffcdd2' : s.priority === 'medium' ? '#fff9c4' : '#c8e6c9'
         }}>{s.priority === 'high' ? '高' : s.priority === 'medium' ? '中' : '低'}</span>
+      )}
+      {!compact && !isShared && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onShare(s); }}
+          style={{
+            border: 'none', background: 'none', cursor: 'pointer',
+            color: '#2196f3', fontSize: '14px', padding: '4px 8px',
+            borderRadius: '4px'
+          }}
+          title="分享日程"
+        >
+          📤
+        </button>
       )}
       {!compact && !s.completed && (
         <button
@@ -56,7 +87,7 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule })
           🔄
         </button>
       )}
-      <button onClick={() => deleteSchedule(s.id)} style={{
+      <button onClick={(e) => { e.stopPropagation(); deleteSchedule(s.id); }} style={{
         border: 'none', background: 'none', cursor: 'pointer',
         color: '#999', fontSize: compact ? '14px' : '18px'
       }}>×</button>
@@ -65,9 +96,18 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule })
 };
 
 export const ScheduleList: React.FC = () => {
-  const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge, checkedExceptionDay, exceptionDays, applyExceptionDay } = useScheduleStore();
+  const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge, exceptionDays, applyExceptionDay, loadOutgoingShares } = useScheduleStore();
   const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
+  const [shareSchedule, setShareSchedule] = useState<Schedule | null>(null);
   const activeChallenges = challenges.filter(c => c.status === 'active');
+
+  const handleShare = (schedule: Schedule) => {
+    setShareSchedule(schedule);
+  };
+
+  const handleShared = () => {
+    loadOutgoingShares();
+  };
 
   const getExceptionDayForDate = (date: string) => {
     return exceptionDays.find(d => d.date === date);
@@ -225,7 +265,7 @@ export const ScheduleList: React.FC = () => {
         <h2 style={{ margin: '0 0 16px' }}>📅 {selectedDate} 日程</h2>
         {daySchedules.length === 0 ? (
           <p style={{ color: '#999', textAlign: 'center', marginTop: '40px' }}>暂无日程安排</p>
-        ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} onReschedule={handleReschedule} />)}
+        ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} onReschedule={handleReschedule} onShare={handleShare} />)}
       </div>
     );
   };
@@ -294,7 +334,7 @@ export const ScheduleList: React.FC = () => {
                     <p style={{ color: '#ccc', textAlign: 'center', fontSize: '11px', marginTop: '20px' }}>
                       空
                     </p>
-                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact onReschedule={handleReschedule} />)}
+                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact onReschedule={handleReschedule} onShare={handleShare} />)}
                 </div>
               </div>
             );
@@ -411,6 +451,13 @@ export const ScheduleList: React.FC = () => {
           }}
           onClose={() => setRescheduleSchedule(null)}
           onConfirmed={() => setRescheduleSchedule(null)}
+        />
+      )}
+      {shareSchedule && (
+        <ShareScheduleDialog
+          schedule={shareSchedule}
+          onClose={() => setShareSchedule(null)}
+          onShared={handleShared}
         />
       )}
     </>

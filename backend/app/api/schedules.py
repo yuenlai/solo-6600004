@@ -336,7 +336,12 @@ async def batch_create_schedules(data: List[ScheduleCreate], db: AsyncSession = 
 async def update_schedule(sid: str, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)):
     s = await db.get(Schedule, sid)
     if not s: raise HTTPException(404, "Not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(s, k, v)
+    update_data = data.model_dump(exclude_unset=True)
+    if "start_time" in update_data and isinstance(update_data["start_time"], str):
+        update_data["start_time"] = datetime.fromisoformat(update_data["start_time"])
+    if "end_time" in update_data and isinstance(update_data["end_time"], str):
+        update_data["end_time"] = datetime.fromisoformat(update_data["end_time"])
+    for k, v in update_data.items(): setattr(s, k, v)
     await db.commit(); await db.refresh(s)
     return s
 
@@ -382,7 +387,9 @@ def _schedule_to_dict(s: Schedule) -> dict:
         "priority": s.priority,
         "category": s.category,
         "completed": s.completed,
-        "recurring": s.recurring
+        "recurring": s.recurring,
+        "share_id": s.share_id,
+        "shared_from": s.shared_from
     }
 
 def _score_time_slot(

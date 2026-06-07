@@ -201,4 +201,24 @@ export const exceptionDayApi = {
   apply: (id: string) => api.post(`/exception-days/${id}/apply`),
 };
 
+export const shareApi = {
+  create: (data: { schedule_id: string; owner_name: string; shared_with: string; message?: string }) =>
+    api.post('/schedule-shares', data),
+  accept: (token: string, sharedWith: string) =>
+    api.post('/schedule-shares/accept', { token, shared_with: sharedWith }),
+  reject: (token: string, sharedWith: string) =>
+    api.post('/schedule-shares/reject', { token, shared_with: sharedWith }),
+  getOutgoing: (ownerName: string) =>
+    api.get('/schedule-shares/outgoing', { params: { owner_name: ownerName } }),
+  getIncoming: (sharedWith: string) =>
+    api.get('/schedule-shares/incoming', { params: { shared_with: sharedWith } }),
+  getAccepted: (userName: string) =>
+    api.get('/schedule-shares/accepted', { params: { user_name: userName } }),
+  sync: (userName: string) =>
+    api.get('/schedule-shares/sync', { params: { user_name: userName } }),
+  cancel: (shareId: string, ownerName: string) =>
+    api.delete(`/schedule-shares/${shareId}`, { params: { owner_name: ownerName } }),
+  getByToken: (token: string) => api.get(`/schedule-shares/token/${token}`),
+};
+
 export default api;

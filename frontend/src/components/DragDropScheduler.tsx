@@ -38,8 +38,9 @@ interface ScheduleBlockProps {
 const ScheduleBlock: React.FC<ScheduleBlockProps> = ({
   schedule, top, height, isDragging, isResizing, conflict, onDragStart, onResizeStart }) => {
   const { toggleComplete, deleteSchedule } = useScheduleStore();
-  const bgColor = CATEGORY_COLORS[schedule.category] || CATEGORY_COLORS['其他'];
-  const borderColor = conflict ? '#d32f2f' : (CATEGORY_BORDER_COLORS[schedule.category] || CATEGORY_BORDER_COLORS['其他']);
+  const isShared = !!schedule.sharedFrom;
+  const bgColor = isShared ? '#e3f2fd' : (CATEGORY_COLORS[schedule.category] || CATEGORY_COLORS['其他']);
+  const borderColor = conflict ? '#d32f2f' : (isShared ? '#2196f3' : (CATEGORY_BORDER_COLORS[schedule.category] || CATEGORY_BORDER_COLORS['其他']));
 
   const formatTime = (iso: string) => {
     return iso.split('T')[1]?.substring(0, 5) || '';
@@ -62,7 +63,7 @@ const ScheduleBlock: React.FC<ScheduleBlockProps> = ({
         cursor: 'move',
         overflow: 'hidden',
         opacity: isDragging || isResizing ? 0.5 : 1,
-        boxShadow: conflict ? '0 0 0 2px rgba(211, 47, 47, 0.3)' : 'none',
+        boxShadow: conflict ? '0 0 0 2px rgba(211, 47, 47, 0.3)' : (isShared ? '0 0 0 2px rgba(33, 150, 243, 0.2)' : 'none'),
         transition: 'box-shadow 0.2s',
         zIndex: isDragging || isResizing ? 100 : 1,
         userSelect: 'none',
@@ -82,8 +83,11 @@ const ScheduleBlock: React.FC<ScheduleBlockProps> = ({
             textDecoration: schedule.completed ? 'line-through' : 'none',
             color: schedule.completed ? '#999' : '#333',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', gap: '4px'
           }}>
+            {isShared && <span style={{ fontSize: '10px' }}>🔗</span>}
             {schedule.title}
+            {isShared && <span style={{ fontSize: '9px', color: '#1976d2', fontWeight: 'normal' }}>· 来自 {schedule.sharedFrom}</span>}
           </div>
           <div style={{ fontSize: '11px', color: '#666' }}>
             {formatTime(schedule.startTime)} - {formatTime(schedule.endTime)}
