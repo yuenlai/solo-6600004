@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare } from '../types';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
@@ -60,6 +60,11 @@ interface ScheduleState {
     habits: { skipped: any[]; kept: any[] };
   } | null>;
   setCurrentExceptionDay: (day: ExceptionDayWithDetails | null) => void;
+  warningCenterData: WarningCenterData | null;
+  loadWarningCenter: () => void;
+  calculateScheduleWarnings: (schedules: Schedule[], now: Date) => ScheduleWarning[];
+  calculateHabitWarnings: (habits: Habit[], now: Date, selectedDate: string) => HabitWarning[];
+  calculateLongPendingWarnings: (schedules: Schedule[], dailyActions: DailyAction[], weeklyActions: WeeklyAction[], now: Date) => LongPendingWarning[];
   currentUser: string;
   outgoingShares: ScheduleShare[];
   incomingShares: ScheduleShare[];
@@ -160,6 +165,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   exceptionDays: [],
   currentExceptionDay: null,
   checkedExceptionDay: null,
+  warningCenterData: null,
   currentUser: localStorage.getItem('currentUser') || '我',
   outgoingShares: [],
   incomingShares: [],
@@ -1461,4 +1467,222 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
   setCurrentExceptionDay: (day) => set({ currentExceptionDay: day }),
+  calculateScheduleWarnings: (schedules, now) => {
+    const warnings: ScheduleWarning[] = [];
+    const nowTime = now.getTime();
+
+    schedules.forEach(schedule => {
+      if (schedule.completed) return;
+
+      const endTime = new Date(schedule.endTime).getTime();
+      const minutesRemaining = Math.round((endTime - nowTime) / (1000 * 60));
+
+      if (minutesRemaining <= 0) {
+        warnings.push({
+          type: 'schedule_timeout',
+          schedule,
+          warningLevel: 'critical',
+          minutesRemaining,
+          deadline: schedule.endTime
+        });
+      } else if (minutesRemaining <= 30) {
+        warnings.push({
+          type: 'schedule_timeout',
+          schedule,
+          warningLevel: 'critical',
+          minutesRemaining,
+          deadline: schedule.endTime
+        });
+      } else if (minutesRemaining <= 60) {
+        warnings.push({
+          type: 'schedule_timeout',
+          schedule,
+          warningLevel: 'warning',
+          minutesRemaining,
+          deadline: schedule.endTime
+        });
+      } else if (minutesRemaining <= 120) {
+        warnings.push({
+          type: 'schedule_timeout',
+          schedule,
+          warningLevel: 'info',
+          minutesRemaining,
+          deadline: schedule.endTime
+        });
+      }
+    });
+
+    return warnings.sort((a, b) => a.minutesRemaining - b.minutesRemaining);
+  },
+  calculateHabitWarnings: (habits, now, selectedDate) => {
+    const warnings: HabitWarning[] = [];
+    const todayStr = selectedDate;
+
+    habits.forEach(habit => {
+      const todayRecord = habit.history.find(r => r.date === todayStr);
+      if (todayRecord?.completed) return;
+
+      const sortedHistory = [...habit.history].sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      let daysSinceLastCompletion = 0;
+      const checkDate = new Date(todayStr);
+
+      for (let i = 0; i < 30; i++) {
+        const dateStr = formatDate(checkDate);
+        const record = sortedHistory.find(r => r.date === dateStr);
+        if (record?.completed) break;
+        daysSinceLastCompletion++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      const currentHour = now.getHours();
+      let warningLevel: WarningLevel = 'info';
+
+      if (daysSinceLastCompletion >= 1) {
+        if (currentHour >= 22 || daysSinceLastCompletion >= 2) {
+          warningLevel = 'critical';
+        } else if (currentHour >= 18 || daysSinceLastCompletion >= 1) {
+          warningLevel = 'warning';
+        } else {
+          warningLevel = 'info';
+        }
+
+        warnings.push({
+          type: 'habit_streak',
+          habit,
+          warningLevel,
+          daysSinceLastCompletion,
+          currentStreak: habit.currentStreak
+        });
+      }
+    });
+
+    return warnings.sort((a, b) => {
+      const levelOrder = { critical: 0, warning: 1, info: 2 };
+      return levelOrder[a.warningLevel] - levelOrder[b.warningLevel] ||
+             b.daysSinceLastCompletion - a.daysSinceLastCompletion;
+    });
+  },
+  calculateLongPendingWarnings: (schedules, dailyActions, weeklyActions, now) => {
+    const warnings: LongPendingWarning[] = [];
+    const nowTime = now.getTime();
+
+    schedules.forEach(schedule => {
+      if (schedule.completed) return;
+
+      const startTime = new Date(schedule.startTime).getTime();
+      const daysPending = Math.floor((nowTime - startTime) / (1000 * 60 * 60 * 24));
+
+      if (daysPending >= 3) {
+        let warningLevel: WarningLevel = 'info';
+        if (daysPending >= 7 || schedule.priority === 'high') {
+          warningLevel = 'critical';
+        } else if (daysPending >= 5 || schedule.priority === 'medium') {
+          warningLevel = 'warning';
+        }
+
+        warnings.push({
+          type: 'long_pending',
+          item: schedule,
+          itemType: 'schedule',
+          warningLevel,
+          daysPending,
+          createdDate: schedule.startTime.split('T')[0]
+        });
+      }
+    });
+
+    dailyActions.forEach(action => {
+      if (action.completed) return;
+
+      const actionDate = new Date(action.date).getTime();
+      const daysPending = Math.floor((nowTime - actionDate) / (1000 * 60 * 60 * 24));
+
+      if (daysPending >= 2) {
+        let warningLevel: WarningLevel = 'info';
+        if (daysPending >= 5) {
+          warningLevel = 'critical';
+        } else if (daysPending >= 3) {
+          warningLevel = 'warning';
+        }
+
+        warnings.push({
+          type: 'long_pending',
+          item: action,
+          itemType: 'daily_action',
+          warningLevel,
+          daysPending,
+          createdDate: action.date
+        });
+      }
+    });
+
+    weeklyActions.forEach(action => {
+      if (action.completed) return;
+
+      const endDate = new Date(action.endDate).getTime();
+      const daysPending = Math.floor((nowTime - endDate) / (1000 * 60 * 60 * 24));
+
+      if (daysPending >= 1) {
+        let warningLevel: WarningLevel = 'info';
+        if (daysPending >= 3) {
+          warningLevel = 'critical';
+        } else if (daysPending >= 2) {
+          warningLevel = 'warning';
+        }
+
+        warnings.push({
+          type: 'long_pending',
+          item: action,
+          itemType: 'weekly_action',
+          warningLevel,
+          daysPending,
+          createdDate: action.startDate
+        });
+      }
+    });
+
+    return warnings.sort((a, b) => {
+      const levelOrder = { critical: 0, warning: 1, info: 2 };
+      return levelOrder[a.warningLevel] - levelOrder[b.warningLevel] ||
+             b.daysPending - a.daysPending;
+    });
+  },
+  loadWarningCenter: () => {
+    const { schedules, habits, dailyActions, selectedDate } = get();
+    const now = new Date();
+
+    const scheduleWarnings = get().calculateScheduleWarnings(schedules, now);
+    const habitWarnings = get().calculateHabitWarnings(habits, now, selectedDate);
+
+    const allWeeklyActions: WeeklyAction[] = [];
+    const { currentGoalDetails } = get();
+    if (currentGoalDetails) {
+      currentGoalDetails.weeklyActions.forEach(wa => {
+        allWeeklyActions.push(wa);
+      });
+    }
+
+    const longPendingWarnings = get().calculateLongPendingWarnings(
+      schedules,
+      dailyActions,
+      allWeeklyActions,
+      now
+    );
+
+    const data: WarningCenterData = {
+      scheduleWarnings,
+      habitWarnings,
+      longPendingWarnings,
+      totalCount: scheduleWarnings.length + habitWarnings.length + longPendingWarnings.length,
+      criticalCount: [...scheduleWarnings, ...habitWarnings, ...longPendingWarnings].filter(w => w.warningLevel === 'critical').length,
+      warningCount: [...scheduleWarnings, ...habitWarnings, ...longPendingWarnings].filter(w => w.warningLevel === 'warning').length,
+      infoCount: [...scheduleWarnings, ...habitWarnings, ...longPendingWarnings].filter(w => w.warningLevel === 'info').length,
+      lastUpdated: now.toISOString()
+    };
+
+    set({ warningCenterData: data });
+  },
 }));

@@ -4,7 +4,7 @@ import { HabitChallengeCreator } from './HabitChallengeCreator';
 import { HabitChallengeCard } from './HabitChallengeCard';
 
 export const HabitTracker: React.FC = () => {
-  const { habits, recordHabit, selectedDate, loadChallenges, challenges, exceptionDays, checkedExceptionDay } = useScheduleStore();
+  const { habits, recordHabit, selectedDate, loadChallenges, challenges, checkedExceptionDay } = useScheduleStore();
   const [showCreator, setShowCreator] = useState(false);
   const [selectedHabitId, setSelectedHabitId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<'habits' | 'challenges'>('habits');

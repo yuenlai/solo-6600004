@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useScheduleStore } from '../store/schedule';
-import { ExceptionDay, ExceptionDayType, ExceptionDayRule } from '../types';
+import { ExceptionDay, ExceptionDayType } from '../types';
 import { ExceptionDayEditor } from './ExceptionDayEditor';
 
 interface ExceptionDayManagerProps {
@@ -15,7 +15,7 @@ const typeConfig: Record<ExceptionDayType, { label: string; icon: string; color:
 };
 
 export const ExceptionDayManager: React.FC<ExceptionDayManagerProps> = ({ onClose }) => {
-  const { exceptionDays, loadExceptionDays, deleteExceptionDay, applyExceptionDay, habits } = useScheduleStore();
+  const { exceptionDays, loadExceptionDays, deleteExceptionDay, applyExceptionDay } = useScheduleStore();
   const [showEditor, setShowEditor] = useState(false);
   const [editingDay, setEditingDay] = useState<ExceptionDay | null>(null);
   const [filterType, setFilterType] = useState<string>('all');

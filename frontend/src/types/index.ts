@@ -289,6 +289,47 @@ export interface DaySummary {
   freeTimeMinutes: number;
 }
 
+export type WarningLevel = 'critical' | 'warning' | 'info';
+export type WarningType = 'schedule_timeout' | 'habit_streak' | 'long_pending';
+
+export interface ScheduleWarning {
+  type: 'schedule_timeout';
+  schedule: Schedule;
+  warningLevel: WarningLevel;
+  minutesRemaining: number;
+  deadline: string;
+}
+
+export interface HabitWarning {
+  type: 'habit_streak';
+  habit: Habit;
+  warningLevel: WarningLevel;
+  daysSinceLastCompletion: number;
+  currentStreak: number;
+}
+
+export interface LongPendingWarning {
+  type: 'long_pending';
+  item: Schedule | DailyAction | WeeklyAction;
+  itemType: 'schedule' | 'daily_action' | 'weekly_action';
+  warningLevel: WarningLevel;
+  daysPending: number;
+  createdDate: string;
+}
+
+export type WarningItem = ScheduleWarning | HabitWarning | LongPendingWarning;
+
+export interface WarningCenterData {
+  scheduleWarnings: ScheduleWarning[];
+  habitWarnings: HabitWarning[];
+  longPendingWarnings: LongPendingWarning[];
+  totalCount: number;
+  criticalCount: number;
+  warningCount: number;
+  infoCount: number;
+  lastUpdated: string;
+}
+
 export interface MultiDayViewData {
   startDate: string;
   endDate: string;

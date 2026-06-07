@@ -29,7 +29,7 @@ const defaultRule: ExceptionDayRule = {
 };
 
 export const ExceptionDayEditor: React.FC<ExceptionDayEditorProps> = ({ onClose, editingDay }) => {
-  const { habits, createExceptionDay, updateExceptionDay, loadExceptionDays } = useScheduleStore();
+  const { habits, createExceptionDay, updateExceptionDay } = useScheduleStore();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     date: editingDay?.date || new Date().toISOString().split('T')[0],

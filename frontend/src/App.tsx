@@ -11,6 +11,7 @@ import { MonthlyGoalPlanner } from './components/MonthlyGoalPlanner';
 import { MonthlyGoalProgress } from './components/MonthlyGoalProgress';
 import { ExceptionDayManager } from './components/ExceptionDayManager';
 import { ShareManager } from './components/ShareManager';
+import { WarningCenter } from './components/WarningCenter';
 import { useScheduleStore } from './store/schedule';
 import { scheduleApi } from './services/api';
 import { Schedule } from './types';
@@ -25,7 +26,8 @@ const App: React.FC = () => {
   const [showGoalPlanner, setShowGoalPlanner] = useState(false);
   const [showExceptionDayManager, setShowExceptionDayManager] = useState(false);
   const [showShareManager, setShowShareManager] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays, incomingShares, loadIncomingShares, loadOutgoingShares, loadAcceptedShares } = useScheduleStore();
+  const [showWarningCenter, setShowWarningCenter] = useState(false);
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, scheduleViewMode, setScheduleViewMode, loadSchedules, loadWeekSchedules, loadMultiDaySchedules, multiDayCount, loadChallenges, loadHabits, loadDailyPlan, morningPlan, eveningReview, loadFocusSessions, loadInterruptionStatistics, loadMonthlyGoals, loadMonthProgress, checkExceptionDay, checkedExceptionDay, loadExceptionDays, incomingShares, loadIncomingShares, loadOutgoingShares, loadAcceptedShares, loadWarningCenter, warningCenterData, loadDailyActions } = useScheduleStore();
 
   useEffect(() => {
     const initData = async () => {
@@ -44,6 +46,8 @@ const App: React.FC = () => {
       loadAcceptedShares();
       await loadDailyPlan(selectedDate);
       await checkExceptionDay(selectedDate);
+      loadDailyActions(selectedDate);
+      loadWarningCenter();
     };
     initData();
   }, []);
@@ -108,6 +112,38 @@ const App: React.FC = () => {
             background: tab === t.key ? 'rgba(255,255,255,0.15)' : 'transparent', color: '#fff', fontSize: '14px'
           }}>{t.label}</button>
         ))}
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => setShowWarningCenter(true)}
+          style={{
+            margin: '0 12px 12px',
+            padding: '12px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            textAlign: 'left',
+            cursor: 'pointer',
+            background: warningCenterData && warningCenterData.totalCount > 0 ? '#f44336' : 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px'
+          }}
+        >
+          <span>🚨 预警中心</span>
+          {warningCenterData && warningCenterData.totalCount > 0 && (
+            <span style={{
+              background: 'rgba(255,255,255,0.3)',
+              padding: '2px 8px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: 600
+            }}>
+              {warningCenterData.totalCount}
+            </span>
+          )}
+        </button>
       </nav>
       <main style={{ flex: 1, overflow: 'auto', background: '#f5f5f5' }}>
         <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', borderBottom: '1px solid #e0e0e0' }}>
@@ -216,6 +252,14 @@ const App: React.FC = () => {
       {showGoalPlanner && <MonthlyGoalPlanner onClose={() => { setShowGoalPlanner(false); loadMonthlyGoals(); loadMonthProgress(selectedDate.slice(0, 7)); }} />}
       {showExceptionDayManager && <ExceptionDayManager onClose={() => { setShowExceptionDayManager(false); checkExceptionDay(selectedDate); loadSchedules(selectedDate); }} />}
       {showShareManager && <ShareManager onClose={() => { setShowShareManager(false); loadSchedules(selectedDate); }} />}
+      {showWarningCenter && (
+        <WarningCenter
+          onClose={() => { setShowWarningCenter(false); loadWarningCenter(); }}
+          onNavigateToSchedule={(_scheduleId, _date) => { setTab('schedule'); }}
+          onNavigateToHabits={() => { setTab('habits'); }}
+          onNavigateToGoals={() => { setTab('goals'); }}
+        />
+      )}
     </div>
   );
 };
