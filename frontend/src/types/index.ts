@@ -58,3 +58,23 @@ export interface RescheduleMode {
   preferredStartTime?: string;
   date?: string;
 }
+
+export interface HabitChallenge {
+  id: string;
+  habitId: string;
+  name: string;
+  targetDays: number;
+  startDate: string;
+  endDate: string;
+  description?: string;
+  status: 'active' | 'completed' | 'failed';
+  records: HabitChallengeRecord[];
+}
+
+export interface HabitChallengeRecord {
+  id: string;
+  challengeId: string;
+  date: string;
+  completed: boolean;
+  habitValue: number;
+}

@@ -13,7 +13,7 @@ const App: React.FC = () => {
   const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
   const [showSmartInput, setShowSmartInput] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules, loadChallenges, loadHabits } = useScheduleStore();
 
   useEffect(() => {
     if (viewMode === 'week') {
@@ -21,6 +21,8 @@ const App: React.FC = () => {
     } else {
       loadSchedules(selectedDate);
     }
+    loadHabits();
+    loadChallenges();
   }, []);
 
   useEffect(() => {

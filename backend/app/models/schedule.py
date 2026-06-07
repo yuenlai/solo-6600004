@@ -47,3 +47,23 @@ class FocusSession(Base):
     end_time = Column(DateTime, nullable=True)
     schedule_id = Column(String, nullable=True)
     completed = Column(Boolean, default=False)
+
+class HabitChallenge(Base):
+    __tablename__ = "habit_challenges"
+    id = Column(String, primary_key=True)
+    habit_id = Column(String, nullable=False)
+    name = Column(String(255), nullable=False)
+    target_days = Column(String(10), nullable=False)
+    start_date = Column(String(10), nullable=False)
+    end_date = Column(String(10), nullable=False)
+    description = Column(Text, default="")
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime, server_default=func.now())
+
+class HabitChallengeRecord(Base):
+    __tablename__ = "habit_challenge_records"
+    id = Column(String, primary_key=True)
+    challenge_id = Column(String, nullable=False)
+    date = Column(String(10), nullable=False)
+    completed = Column(Boolean, default=False)
+    habit_value = Column(String(10), default="0")

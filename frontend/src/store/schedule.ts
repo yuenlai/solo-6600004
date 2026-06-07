@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession } from '../types';
-import { scheduleApi } from '../services/api';
+import { Schedule, Habit, FocusSession, HabitChallenge } from '../types';
+import { scheduleApi, challengeApi, habitApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
   schedules: Schedule[];
   habits: Habit[];
+  challenges: HabitChallenge[];
   focusSession: FocusSession | null;
   selectedDate: string;
   viewMode: 'day' | 'week';
@@ -24,10 +25,15 @@ interface ScheduleState {
   setSchedules: (schedules: Schedule[]) => void;
   loadSchedules: (date?: string) => Promise<void>;
   loadWeekSchedules: (weekStartDate?: string) => Promise<void>;
+  loadHabits: () => Promise<void>;
+  loadChallenges: () => Promise<void>;
+  addChallenge: (c: HabitChallenge) => void;
+  recordChallenge: (challengeId: string, date: string, habitValue: number) => Promise<void>;
+  deleteChallenge: (challengeId: string) => Promise<void>;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
-  schedules: [], habits: [], focusSession: null,
+  schedules: [], habits: [], challenges: [], focusSession: null,
   selectedDate: new Date().toISOString().split('T')[0],
   viewMode: 'day',
   loading: false,
@@ -126,4 +132,75 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   endFocus: () => set({ focusSession: null }),
   setSelectedDate: (date) => set({ selectedDate: date }),
   setViewMode: (mode) => set({ viewMode: mode }),
+  loadHabits: async () => {
+    set({ loading: true });
+    try {
+      const res = await habitApi.list();
+      const habits = res.data.map((h: any) => ({
+        id: h.id,
+        name: h.name,
+        icon: h.icon,
+        color: h.color,
+        target: parseInt(h.target),
+        unit: h.unit,
+        currentStreak: parseInt(h.current_streak),
+        history: [],
+        reminder: h.reminder
+      }));
+      set({ habits });
+    } catch (e) {
+      console.error('Failed to load habits:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadChallenges: async () => {
+    set({ loading: true });
+    try {
+      const res = await challengeApi.list();
+      set({ challenges: res.data });
+    } catch (e) {
+      console.error('Failed to load challenges:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  addChallenge: (c) => set({ challenges: [...get().challenges, c] }),
+  recordChallenge: async (challengeId, date, habitValue) => {
+    try {
+      const res = await challengeApi.record(challengeId, { date, habitValue });
+      const record = res.data;
+      set({
+        challenges: get().challenges.map(c => {
+          if (c.id !== challengeId) return c;
+          const existingRecord = c.records.find(r => r.date === date);
+          let newRecords;
+          if (existingRecord) {
+            newRecords = c.records.map(r => r.date === date ? { ...r, completed: true, habitValue } : r);
+          } else {
+            newRecords = [...c.records, { id: record.id, challengeId, date, completed: true, habitValue }];
+          }
+          return {
+            ...c,
+            records: newRecords,
+            status: record.challengeStatus || c.status
+          };
+        })
+      });
+    } catch (e) {
+      console.error('Failed to record challenge:', e);
+      throw e;
+    }
+  },
+  deleteChallenge: async (challengeId) => {
+    try {
+      await challengeApi.delete(challengeId);
+      set({
+        challenges: get().challenges.filter(c => c.id !== challengeId)
+      });
+    } catch (e) {
+      console.error('Failed to delete challenge:', e);
+      throw e;
+    }
+  },
 }));

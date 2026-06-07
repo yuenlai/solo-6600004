@@ -3,6 +3,7 @@ import { useScheduleStore } from '../store/schedule';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 import { Schedule } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
+import { ChallengeCard } from './HabitChallengeCard';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -62,8 +63,9 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule })
 };
 
 export const ScheduleList: React.FC = () => {
-  const { schedules, selectedDate, viewMode, setViewMode, setSelectedDate } = useScheduleStore();
+  const { schedules, selectedDate, viewMode, setViewMode, setSelectedDate, challenges, deleteChallenge } = useScheduleStore();
   const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
+  const activeChallenges = challenges.filter(c => c.status === 'active');
 
   const getDurationMinutes = (start: string, end: string) => {
     return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000);
@@ -81,10 +83,41 @@ export const ScheduleList: React.FC = () => {
   const weekDates = getWeekDates();
   const isToday = (date: string) => date === new Date().toISOString().split('T')[0];
 
+  const handleDeleteChallenge = async (id: string) => {
+    if (confirm('确定要删除这个挑战吗？')) {
+      try {
+        await deleteChallenge(id);
+      } catch (e) {
+        console.error('Failed to delete challenge:', e);
+        alert('删除失败，请稍后重试');
+      }
+    }
+  };
+
   const renderDayView = () => {
     const daySchedules = schedules.filter(s => s.startTime.startsWith(selectedDate));
     return (
       <div style={{ padding: '16px' }}>
+        {activeChallenges.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px' }}>
+              🔥 我的挑战 ({activeChallenges.length})
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '12px'
+            }}>
+              {activeChallenges.map(c => (
+                <ChallengeCard
+                  key={c.id}
+                  challenge={c}
+                  onDelete={() => handleDeleteChallenge(c.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <h2 style={{ margin: '0 0 16px' }}>📅 {selectedDate} 日程</h2>
         {daySchedules.length === 0 ? (
           <p style={{ color: '#999', textAlign: 'center', marginTop: '40px' }}>暂无日程安排</p>
@@ -103,6 +136,26 @@ export const ScheduleList: React.FC = () => {
 
     return (
       <div style={{ padding: '16px' }}>
+        {activeChallenges.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px' }}>
+              🔥 我的挑战 ({activeChallenges.length})
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '12px'
+            }}>
+              {activeChallenges.map(c => (
+                <ChallengeCard
+                  key={c.id}
+                  challenge={c}
+                  onDelete={() => handleDeleteChallenge(c.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <h2 style={{ margin: '0 0 16px' }}>📅 {weekStart} ~ {weekEnd} 周视图</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
           {weekDates.map((date, idx) => {

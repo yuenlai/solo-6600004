@@ -49,4 +49,11 @@ export const reportApi = {
   weekly: (weekStart: string) => api.get('/reports/weekly', { params: { weekStart } }),
   monthly: (month: string) => api.get('/reports/monthly', { params: { month } }),
 };
+export const challengeApi = {
+  list: () => api.get('/challenges'),
+  create: (data: any) => api.post('/challenges', data),
+  record: (id: string, data: any) => api.post(`/challenges/${id}/record`, data),
+  updateStatus: (id: string) => api.put(`/challenges/${id}/status`),
+  delete: (id: string) => api.delete(`/challenges/${id}`),
+};
 export default api;

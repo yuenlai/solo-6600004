@@ -3,11 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.database import init_db
 from .api.schedules import router as schedules_router
 from .api.habits import router as habits_router
+from .api.challenges import router as challenges_router
 
 app = FastAPI(title="Smart Schedule Planner API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(schedules_router, prefix="/api")
 app.include_router(habits_router, prefix="/api")
+app.include_router(challenges_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup(): await init_db()
