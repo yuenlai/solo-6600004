@@ -13,17 +13,25 @@ const App: React.FC = () => {
   const [tab, setTab] = useState<'schedule' | 'habits' | 'focus' | 'report'>('schedule');
   const [showSmartInput, setShowSmartInput] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
-  const { addSchedule, selectedDate, setSelectedDate, loadSchedules } = useScheduleStore();
+  const { addSchedule, selectedDate, setSelectedDate, viewMode, loadSchedules, loadWeekSchedules } = useScheduleStore();
 
   useEffect(() => {
-    loadSchedules();
+    if (viewMode === 'week') {
+      loadWeekSchedules(selectedDate);
+    } else {
+      loadSchedules(selectedDate);
+    }
   }, []);
 
   useEffect(() => {
     if (tab === 'schedule') {
-      loadSchedules(selectedDate);
+      if (viewMode === 'week') {
+        loadWeekSchedules(selectedDate);
+      } else {
+        loadSchedules(selectedDate);
+      }
     }
-  }, [selectedDate, tab]);
+  }, [selectedDate, tab, viewMode]);
 
   const handleQuickAdd = async () => {
     const title = prompt('日程标题:');

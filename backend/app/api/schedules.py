@@ -164,9 +164,20 @@ def parse_natural_language(text: str, date: str) -> List[ParsedSchedule]:
     return schedules
 
 @router.get("")
-async def list_schedules(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def list_schedules(
+    date: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
     q = select(Schedule).order_by(Schedule.start_time)
-    if date: q = q.where(Schedule.start_time.contains(date))
+    if date:
+        q = q.where(Schedule.start_time.contains(date))
+    elif start_date and end_date:
+        q = q.where(
+            Schedule.start_time >= start_date,
+            Schedule.start_time <= end_date + 'T23:59:59'
+        )
     result = await db.execute(q)
     return result.scalars().all()
 

@@ -15,7 +15,7 @@ export const WeekTemplateSelector: React.FC<WeekTemplateSelectorProps> = ({ onCl
   const [weekStartDate, setWeekStartDate] = useState<string>(formatDate(getWeekStartDate(new Date())));
   const [applying, setApplying] = useState(false);
   const [previewDay, setPreviewDay] = useState<number>(0);
-  const { addSchedules, loadSchedules, selectedDate } = useScheduleStore();
+  const { addSchedules, setViewMode, setSelectedDate, loadWeekSchedules } = useScheduleStore();
 
   const getWeekDates = () => {
     const start = new Date(weekStartDate);
@@ -62,8 +62,10 @@ export const WeekTemplateSelector: React.FC<WeekTemplateSelectorProps> = ({ onCl
       }));
 
       addSchedules(createdSchedules);
-      await loadSchedules(selectedDate);
-      alert(`成功套用「${selectedTemplate.name}」模板！共添加 ${createdSchedules.length} 个日程。`);
+      setViewMode('week');
+      setSelectedDate(weekStartDate);
+      await loadWeekSchedules(weekStartDate);
+      alert(`成功套用「${selectedTemplate.name}」模板！共添加 ${createdSchedules.length} 个日程，已自动切换到周视图。`);
       onClose();
     } catch (e) {
       console.error('Failed to apply template:', e);

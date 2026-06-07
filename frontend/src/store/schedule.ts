@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Schedule, Habit, FocusSession } from '../types';
 import { scheduleApi } from '../services/api';
+import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
   schedules: Schedule[];
@@ -22,6 +23,7 @@ interface ScheduleState {
   setViewMode: (mode: 'day' | 'week') => void;
   setSchedules: (schedules: Schedule[]) => void;
   loadSchedules: (date?: string) => Promise<void>;
+  loadWeekSchedules: (weekStartDate?: string) => Promise<void>;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -51,6 +53,31 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       set({ schedules });
     } catch (e) {
       console.error('Failed to load schedules:', e);
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadWeekSchedules: async (weekStartDate) => {
+    set({ loading: true });
+    try {
+      const targetDate = weekStartDate || get().selectedDate;
+      const weekStart = getWeekStartDate(new Date(targetDate));
+      const weekEnd = addDays(weekStart, 6);
+      const res = await scheduleApi.listByRange(formatDate(weekStart), formatDate(weekEnd));
+      const schedules = res.data.map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        priority: s.priority,
+        category: s.category,
+        completed: s.completed,
+        recurring: s.recurring
+      }));
+      set({ schedules });
+    } catch (e) {
+      console.error('Failed to load week schedules:', e);
     } finally {
       set({ loading: false });
     }

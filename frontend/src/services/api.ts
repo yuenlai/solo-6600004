@@ -2,6 +2,8 @@ import axios from 'axios';
 const api = axios.create({ baseURL: '/api' });
 export const scheduleApi = {
   list: (date?: string) => api.get('/schedules', { params: { date } }),
+  listByRange: (startDate: string, endDate: string) =>
+    api.get('/schedules', { params: { start_date: startDate, end_date: endDate } }),
   create: (data: any) => api.post('/schedules', data),
   update: (id: string, data: any) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
