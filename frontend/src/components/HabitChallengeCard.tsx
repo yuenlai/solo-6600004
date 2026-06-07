@@ -8,7 +8,7 @@ interface ChallengeCardProps {
 }
 
 export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onDelete }) => {
-  const { habits, selectedDate, recordChallenge } = useScheduleStore();
+  const { habits, recordChallenge } = useScheduleStore();
   const habit = habits.find(h => h.id === challenge.habitId);
 
   const completedDays = challenge.records.filter(r => r.completed).length;
@@ -20,7 +20,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onDelet
   const diffTime = endDate.getTime() - todayDate.getTime();
   const remainingDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-  const todayRecord = challenge.records.find(r => r.date === selectedDate);
+  const todayRecord = challenge.records.find(r => r.date === today);
   const isCompletedToday = todayRecord?.completed || false;
 
   const isOnTrack = (() => {
@@ -44,11 +44,17 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onDelet
     return isOnTrack ? '✅ 进度正常' : '⚠️ 需要加油';
   };
 
+  const isCheckInAvailable = (() => {
+    if (challenge.status !== 'active') return false;
+    if (today < challenge.startDate || today > challenge.endDate) return false;
+    return true;
+  })();
+
   const handleCheckIn = async () => {
-    if (challenge.status !== 'active') return;
+    if (!isCheckInAvailable) return;
     try {
       const habitValue = habit?.target || 1;
-      await recordChallenge(challenge.id, selectedDate, habitValue);
+      await recordChallenge(challenge.id, today, habitValue);
     } catch (e) {
       console.error('Failed to check in:', e);
       alert('打卡失败，请稍后重试');
@@ -143,28 +149,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onDelet
       </div>
 
       <div style={{ display: 'flex', gap: '8px' }}>
-        {challenge.status === 'active' ? (
-          isCompletedToday ? (
-            <div style={{
-              flex: 1, textAlign: 'center', padding: '10px',
-              background: '#e8f5e9', borderRadius: '8px',
-              color: '#4caf50', fontSize: '14px', fontWeight: 500
-            }}>
-              ✓ 今日已打卡
-            </div>
-          ) : (
-            <button
-              onClick={handleCheckIn}
-              style={{
-                flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
-                background: '#1a237e', color: '#fff', cursor: 'pointer',
-                fontSize: '14px', fontWeight: 500
-              }}
-            >
-              📝 今日打卡
-            </button>
-          )
-        ) : (
+        {challenge.status !== 'active' ? (
           <div style={{
             flex: 1, textAlign: 'center', padding: '10px',
             background: challenge.status === 'completed' ? '#e8f5e9' : '#ffebee',
@@ -174,6 +159,33 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onDelet
           }}>
             {challenge.status === 'completed' ? '🎉 恭喜完成挑战！' : '😢 挑战已结束'}
           </div>
+        ) : !isCheckInAvailable ? (
+          <div style={{
+            flex: 1, textAlign: 'center', padding: '10px',
+            background: '#f5f5f5', borderRadius: '8px',
+            color: '#999', fontSize: '14px', fontWeight: 500
+          }}>
+            {today < challenge.startDate ? '⏳ 挑战尚未开始' : '⏰ 挑战已结束'}
+          </div>
+        ) : isCompletedToday ? (
+          <div style={{
+            flex: 1, textAlign: 'center', padding: '10px',
+            background: '#e8f5e9', borderRadius: '8px',
+            color: '#4caf50', fontSize: '14px', fontWeight: 500
+          }}>
+            ✓ 今日已打卡
+          </div>
+        ) : (
+          <button
+            onClick={handleCheckIn}
+            style={{
+              flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+              background: '#1a237e', color: '#fff', cursor: 'pointer',
+              fontSize: '14px', fontWeight: 500
+            }}
+          >
+            📝 今日打卡
+          </button>
         )}
       </div>
     </div>

@@ -101,6 +101,17 @@ async def record_challenge(cid: str, data: ChallengeRecordCreate, db: AsyncSessi
     if not challenge:
         raise HTTPException(404, "Challenge not found")
     
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if challenge.status != "active":
+        raise HTTPException(400, f"Challenge is {challenge.status}, cannot record")
+    
+    if data.date != today:
+        raise HTTPException(400, f"Can only record for today ({today}), not {data.date}")
+    
+    if today < challenge.start_date or today > challenge.end_date:
+        raise HTTPException(400, f"Challenge period: {challenge.start_date} to {challenge.end_date}, today is {today}")
+    
     existing_result = await db.execute(
         select(HabitChallengeRecord).where(
             HabitChallengeRecord.challenge_id == cid,
@@ -136,7 +147,6 @@ async def record_challenge(cid: str, data: ChallengeRecordCreate, db: AsyncSessi
     completed_days = len(records_result.scalars().all())
     target_days = int(challenge.target_days)
     
-    today = datetime.now().strftime("%Y-%m-%d")
     if challenge.status == "active":
         if completed_days >= target_days:
             challenge.status = "completed"
