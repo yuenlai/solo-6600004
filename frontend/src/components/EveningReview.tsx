@@ -73,7 +73,6 @@ export const EveningReview: React.FC<EveningReviewProps> = ({ onClose }) => {
 
   const handleToggleComplete = async (scheduleId: string) => {
     await toggleComplete(scheduleId);
-    await loadCompletionStats(selectedDate);
   };
 
   const handleSave = async () => {

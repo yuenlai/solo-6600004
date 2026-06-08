@@ -86,6 +86,7 @@ interface ScheduleState {
   updateSchedule: (id: string, updates: Partial<Schedule>) => void;
   deleteSchedule: (id: string) => void;
   toggleComplete: (id: string) => void;
+  refreshCompletionStats: () => void;
   updateScheduleTime: (id: string, startTime: string, endTime: string) => Promise<boolean>;
   checkScheduleConflict: (startTime: string, endTime: string, excludeId?: string, extra?: { title?: string; priority?: string; category?: string }) => Promise<ConflictInfo | null>;
   setScheduleViewMode: (mode: 'list' | 'timeline') => void;
@@ -638,12 +639,46 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     if (schedule) {
       try {
         await scheduleApi.update(id, { completed: !schedule.completed });
-        set({
-          schedules: get().schedules.map(s => s.id === id ? { ...s, completed: !s.completed } : s)
-        });
+        const newSchedules = get().schedules.map(s => s.id === id ? { ...s, completed: !s.completed } : s);
+        set({ schedules: newSchedules });
+        get().refreshCompletionStats();
       } catch (e) {
         console.error('Failed to toggle schedule:', e);
       }
+    }
+  },
+  refreshCompletionStats: () => {
+    const { schedules, selectedDate, multiDayViewData, eveningReview } = get();
+
+    const daySchedules = schedules.filter(s => s.startTime.startsWith(selectedDate));
+    const totalCount = daySchedules.length;
+    const completedCount = daySchedules.filter(s => s.completed).length;
+    const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    const newCompletionStats: CompletionStats = {
+      date: selectedDate,
+      totalCount,
+      completedCount,
+      completionRate,
+      schedules: daySchedules,
+    };
+    set({ completionStats: newCompletionStats });
+
+    if (eveningReview) {
+      set({
+        eveningReview: {
+          ...eveningReview,
+          completedCount,
+          totalCount,
+          completionRate,
+        },
+      });
+    }
+
+    if (multiDayViewData) {
+      const { startDate, dayCount } = multiDayViewData;
+      const newViewData = get().generateMultiDayViewData(startDate, dayCount, schedules);
+      set({ multiDayViewData: newViewData });
     }
   },
   addHabit: (h) => set({ habits: [...get().habits, h] }),
