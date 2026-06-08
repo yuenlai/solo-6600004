@@ -105,10 +105,18 @@ export const focusSessionApi = {
   listByRange: (startDate: string, endDate: string) =>
     api.get('/focus-sessions', { params: { start_date: startDate, end_date: endDate } }),
   get: (id: string) => api.get(`/focus-sessions/${id}`),
+  getActive: () => api.get('/focus-sessions/active/current'),
   create: (data: { duration: number; start_time: string; schedule_id?: string }) =>
     api.post('/focus-sessions', data),
-  update: (id: string, data: { end_time?: string; completed?: boolean; interrupted?: boolean }) =>
+  update: (id: string, data: { 
+    end_time?: string; completed?: boolean; interrupted?: boolean;
+    is_paused?: boolean; paused_at?: string; accumulated_seconds?: number;
+  }) =>
     api.put(`/focus-sessions/${id}`, data),
+  pause: (id: string, data: { paused_at: string; accumulated_seconds: number }) =>
+    api.post(`/focus-sessions/${id}/pause`, data),
+  resume: (id: string) =>
+    api.post(`/focus-sessions/${id}/resume`),
   delete: (id: string) => api.delete(`/focus-sessions/${id}`),
   getInterruptionStatistics: (startDate: string, endDate: string) =>
     api.get('/focus-sessions/statistics/interruptions', { params: { start_date: startDate, end_date: endDate } }),

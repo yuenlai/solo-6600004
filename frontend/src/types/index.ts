@@ -45,7 +45,8 @@ export interface HabitStats {
 export interface FocusSession {
   id: string; duration: number; startTime: string;
   endTime?: string; scheduleId?: string; completed: boolean;
-  interrupted: boolean;
+  interrupted: boolean; isPaused: boolean; pausedAt?: string;
+  accumulatedSeconds: number;
 }
 
 export interface InterruptionStatistics {

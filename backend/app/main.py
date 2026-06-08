@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .core.database import init_db, async_session
+from .core.database import init_db, async_session, engine
+from .core.migrations import migrate_focus_session_columns
 from .api.schedules import router as schedules_router
 from .api.habits import router as habits_router, deduplicate_habit_records
 from .api.challenges import router as challenges_router
@@ -29,6 +30,7 @@ app.include_router(fragment_time_router, prefix="/api")
 @app.on_event("startup")
 async def startup(): 
     await init_db()
+    await migrate_focus_session_columns(engine)
     try:
         async with async_session() as db:
             removed = await deduplicate_habit_records(db)

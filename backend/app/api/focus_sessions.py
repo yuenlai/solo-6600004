@@ -19,6 +19,16 @@ class FocusSessionUpdate(BaseModel):
     end_time: Optional[str] = None
     completed: Optional[bool] = None
     interrupted: Optional[bool] = None
+    is_paused: Optional[bool] = None
+    paused_at: Optional[str] = None
+    accumulated_seconds: Optional[int] = None
+
+class FocusSessionPause(BaseModel):
+    paused_at: str
+    accumulated_seconds: int
+
+class FocusSessionResume(BaseModel):
+    pass
 
 def _focus_session_to_dict(s: FocusSession) -> dict:
     return {
@@ -28,7 +38,10 @@ def _focus_session_to_dict(s: FocusSession) -> dict:
         "end_time": s.end_time.isoformat() if isinstance(s.end_time, datetime) else s.end_time,
         "schedule_id": s.schedule_id,
         "completed": s.completed,
-        "interrupted": s.interrupted
+        "interrupted": s.interrupted,
+        "is_paused": s.is_paused,
+        "paused_at": s.paused_at.isoformat() if isinstance(s.paused_at, datetime) else s.paused_at,
+        "accumulated_seconds": int(s.accumulated_seconds) if isinstance(s.accumulated_seconds, str) else s.accumulated_seconds
     }
 
 @router.get("")
@@ -72,6 +85,45 @@ async def create_focus_session(data: FocusSessionCreate, db: AsyncSession = Depe
     await db.refresh(s)
     return _focus_session_to_dict(s)
 
+@router.get("/active/current")
+async def get_active_focus_session(db: AsyncSession = Depends(get_db)):
+    q = select(FocusSession).where(
+        FocusSession.completed == False,
+        FocusSession.interrupted == False
+    ).order_by(FocusSession.start_time.desc()).limit(1)
+    result = await db.execute(q)
+    s = result.scalar_one_or_none()
+    if not s:
+        return None
+    return _focus_session_to_dict(s)
+
+@router.post("/{fsid}/pause")
+async def pause_focus_session(fsid: str, data: FocusSessionPause, db: AsyncSession = Depends(get_db)):
+    s = await db.get(FocusSession, fsid)
+    if not s:
+        raise HTTPException(404, "Not found")
+    if s.completed or s.interrupted:
+        raise HTTPException(400, "Session already ended")
+    s.is_paused = True
+    s.paused_at = datetime.fromisoformat(data.paused_at) if isinstance(data.paused_at, str) else data.paused_at
+    s.accumulated_seconds = str(data.accumulated_seconds)
+    await db.commit()
+    await db.refresh(s)
+    return _focus_session_to_dict(s)
+
+@router.post("/{fsid}/resume")
+async def resume_focus_session(fsid: str, db: AsyncSession = Depends(get_db)):
+    s = await db.get(FocusSession, fsid)
+    if not s:
+        raise HTTPException(404, "Not found")
+    if not s.is_paused:
+        raise HTTPException(400, "Session is not paused")
+    s.is_paused = False
+    s.paused_at = None
+    await db.commit()
+    await db.refresh(s)
+    return _focus_session_to_dict(s)
+
 @router.put("/{fsid}")
 async def update_focus_session(fsid: str, data: FocusSessionUpdate, db: AsyncSession = Depends(get_db)):
     s = await db.get(FocusSession, fsid)
@@ -79,8 +131,10 @@ async def update_focus_session(fsid: str, data: FocusSessionUpdate, db: AsyncSes
         raise HTTPException(404, "Not found")
     update_data = data.model_dump(exclude_unset=True)
     for k, v in update_data.items():
-        if k == "end_time" and v is not None:
+        if k in ("end_time", "paused_at") and v is not None:
             setattr(s, k, datetime.fromisoformat(v) if isinstance(v, str) else v)
+        elif k == "accumulated_seconds" and v is not None:
+            setattr(s, k, str(v))
         else:
             setattr(s, k, v)
     await db.commit()

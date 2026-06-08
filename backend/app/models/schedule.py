@@ -39,6 +39,9 @@ class FocusSession(Base):
     schedule_id = Column(String, nullable=True)
     completed = Column(Boolean, default=False)
     interrupted = Column(Boolean, default=False)
+    is_paused = Column(Boolean, default=False)
+    paused_at = Column(DateTime, nullable=True)
+    accumulated_seconds = Column(String(10), default="0")
 
 class HabitChallenge(Base):
     __tablename__ = "habit_challenges"

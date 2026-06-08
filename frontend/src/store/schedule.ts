@@ -101,9 +101,12 @@ interface ScheduleState {
   loadHabitStats: (habitId: string) => Promise<HabitStats | null>;
   loadAllHabitStats: () => Promise<void>;
   startFocus: (duration: number, scheduleId?: string) => Promise<void>;
+  pauseFocus: (accumulatedSeconds: number) => Promise<void>;
+  resumeFocus: () => Promise<void>;
   completeFocus: () => Promise<void>;
   interruptFocus: () => Promise<void>;
   endFocus: () => void;
+  loadActiveFocusSession: () => Promise<FocusSession | null>;
   loadFocusSessions: (date?: string) => Promise<void>;
   loadFocusSessionsByRange: (startDate: string, endDate: string) => Promise<void>;
   loadInterruptionStatistics: (startDate: string, endDate: string) => Promise<void>;
@@ -792,11 +795,62 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         endTime: res.data.end_time,
         scheduleId: res.data.schedule_id,
         completed: res.data.completed,
-        interrupted: res.data.interrupted
+        interrupted: res.data.interrupted,
+        isPaused: res.data.is_paused ?? false,
+        pausedAt: res.data.paused_at,
+        accumulatedSeconds: res.data.accumulated_seconds ?? 0
       };
       set({ focusSession: session });
     } catch (e) {
       console.error('Failed to start focus session:', e);
+    }
+  },
+  pauseFocus: async (accumulatedSeconds) => {
+    const { focusSession } = get();
+    if (!focusSession) return;
+    try {
+      const pausedAt = new Date().toISOString();
+      const res = await focusSessionApi.pause(focusSession.id, {
+        paused_at: pausedAt,
+        accumulated_seconds: accumulatedSeconds
+      });
+      const session: FocusSession = {
+        id: res.data.id,
+        duration: res.data.duration,
+        startTime: res.data.start_time,
+        endTime: res.data.end_time,
+        scheduleId: res.data.schedule_id,
+        completed: res.data.completed,
+        interrupted: res.data.interrupted,
+        isPaused: res.data.is_paused,
+        pausedAt: res.data.paused_at,
+        accumulatedSeconds: res.data.accumulated_seconds
+      };
+      set({ focusSession: session });
+    } catch (e) {
+      console.error('Failed to pause focus session:', e);
+    }
+  },
+  resumeFocus: async () => {
+    const { focusSession } = get();
+    if (!focusSession) return;
+    try {
+      const res = await focusSessionApi.resume(focusSession.id);
+      const session: FocusSession = {
+        id: res.data.id,
+        duration: res.data.duration,
+        startTime: res.data.start_time,
+        endTime: res.data.end_time,
+        scheduleId: res.data.schedule_id,
+        completed: res.data.completed,
+        interrupted: res.data.interrupted,
+        isPaused: res.data.is_paused,
+        pausedAt: res.data.paused_at,
+        accumulatedSeconds: res.data.accumulated_seconds
+      };
+      set({ focusSession: session });
+    } catch (e) {
+      console.error('Failed to resume focus session:', e);
     }
   },
   completeFocus: async () => {
@@ -807,7 +861,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       await focusSessionApi.update(focusSession.id, {
         end_time: endTime,
         completed: true,
-        interrupted: false
+        interrupted: false,
+        is_paused: false
       });
       set({ focusSession: null });
       await get().loadFocusSessions();
@@ -823,7 +878,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       await focusSessionApi.update(focusSession.id, {
         end_time: endTime,
         completed: false,
-        interrupted: true
+        interrupted: true,
+        is_paused: false
       });
       set({ focusSession: null });
       await get().loadFocusSessions();
@@ -832,6 +888,32 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
   endFocus: () => set({ focusSession: null }),
+  loadActiveFocusSession: async () => {
+    try {
+      const res = await focusSessionApi.getActive();
+      if (!res.data) {
+        set({ focusSession: null });
+        return null;
+      }
+      const session: FocusSession = {
+        id: res.data.id,
+        duration: res.data.duration,
+        startTime: res.data.start_time,
+        endTime: res.data.end_time,
+        scheduleId: res.data.schedule_id,
+        completed: res.data.completed,
+        interrupted: res.data.interrupted,
+        isPaused: res.data.is_paused ?? false,
+        pausedAt: res.data.paused_at,
+        accumulatedSeconds: res.data.accumulated_seconds ?? 0
+      };
+      set({ focusSession: session });
+      return session;
+    } catch (e) {
+      console.error('Failed to load active focus session:', e);
+      return null;
+    }
+  },
   loadFocusSessions: async (date) => {
     try {
       const targetDate = date || get().selectedDate;
@@ -843,7 +925,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         endTime: s.end_time,
         scheduleId: s.schedule_id,
         completed: s.completed,
-        interrupted: s.interrupted
+        interrupted: s.interrupted,
+        isPaused: s.is_paused ?? false,
+        pausedAt: s.paused_at,
+        accumulatedSeconds: s.accumulated_seconds ?? 0
       }));
       set({ focusSessions: sessions });
     } catch (e) {
@@ -860,7 +945,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         endTime: s.end_time,
         scheduleId: s.schedule_id,
         completed: s.completed,
-        interrupted: s.interrupted
+        interrupted: s.interrupted,
+        isPaused: s.is_paused ?? false,
+        pausedAt: s.paused_at,
+        accumulatedSeconds: s.accumulated_seconds ?? 0
       }));
       set({ focusSessions: sessions });
     } catch (e) {
@@ -880,7 +968,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
           endTime: s.end_time,
           scheduleId: s.schedule_id,
           completed: s.completed,
-          interrupted: s.interrupted
+          interrupted: s.interrupted,
+          isPaused: s.is_paused ?? false,
+          pausedAt: s.paused_at,
+          accumulatedSeconds: s.accumulated_seconds ?? 0
         }))
       };
       set({ interruptionStatistics: stats });
