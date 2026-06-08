@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Boolean, JSON, Enum as SAEnum
+from sqlalchemy import Column, String, Text, DateTime, Boolean, JSON, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.sql import func
 from ..core.database import Base
 import enum
@@ -25,6 +25,10 @@ class HabitRecord(Base):
     date = Column(String(10), nullable=False)
     value = Column(String(10), default="1")
     completed = Column(Boolean, default=False)
+    
+    __table_args__ = (
+        UniqueConstraint('habit_id', 'date', name='_habit_date_uc'),
+    )
 
 class FocusSession(Base):
     __tablename__ = "focus_sessions"

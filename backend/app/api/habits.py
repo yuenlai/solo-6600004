@@ -22,6 +22,91 @@ def parse_date(date_str: str) -> datetime:
 def format_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d")
 
+def get_unique_completed_dates(records) -> list:
+    seen_dates = set()
+    unique_dates = []
+    for record in records:
+        if not record.completed:
+            continue
+        record_date = parse_date(record.date).date()
+        date_str = record_date.strftime("%Y-%m-%d")
+        if date_str not in seen_dates:
+            seen_dates.add(date_str)
+            unique_dates.append(record_date)
+    return sorted(unique_dates, reverse=True)
+
+def calculate_current_streak(unique_dates: list) -> int:
+    if not unique_dates:
+        return 0
+    
+    today = datetime.now().date()
+    latest_date = unique_dates[0]
+    days_since_latest = (today - latest_date).days
+    
+    if days_since_latest > 1:
+        return 0
+    
+    current_streak = 1
+    for i in range(1, len(unique_dates)):
+        prev_date = unique_dates[i-1]
+        curr_date = unique_dates[i]
+        delta = (prev_date - curr_date).days
+        
+        if delta == 1:
+            current_streak += 1
+        elif delta > 1:
+            break
+    
+    return current_streak
+
+def calculate_longest_streak(unique_dates: list) -> int:
+    if not unique_dates:
+        return 0
+    
+    sorted_dates = sorted(unique_dates)
+    longest_streak = 1
+    temp_streak = 1
+    
+    for i in range(1, len(sorted_dates)):
+        delta = (sorted_dates[i] - sorted_dates[i-1]).days
+        if delta == 1:
+            temp_streak += 1
+            longest_streak = max(longest_streak, temp_streak)
+        elif delta > 1:
+            temp_streak = 1
+    
+    return longest_streak
+
+async def deduplicate_habit_records(db: AsyncSession, habit_id: str = None) -> int:
+    query = select(HabitRecord).order_by(HabitRecord.habit_id, HabitRecord.date)
+    if habit_id:
+        query = query.where(HabitRecord.habit_id == habit_id)
+    
+    result = await db.execute(query)
+    records = result.scalars().all()
+    
+    seen = {}
+    to_delete = []
+    for record in records:
+        key = (record.habit_id, record.date)
+        if key in seen:
+            existing = seen[key]
+            if record.completed and not existing.completed:
+                to_delete.append(existing)
+                seen[key] = record
+            else:
+                to_delete.append(record)
+        else:
+            seen[key] = record
+    
+    for record in to_delete:
+        await db.delete(record)
+    
+    if to_delete:
+        await db.commit()
+    
+    return len(to_delete)
+
 async def recalculate_streak(habit_id: str, db: AsyncSession) -> int:
     result = await db.execute(
         select(HabitRecord)
@@ -30,24 +115,8 @@ async def recalculate_streak(habit_id: str, db: AsyncSession) -> int:
     )
     records = result.scalars().all()
     
-    if not records:
-        return 0
-    
-    today = datetime.now().date()
-    current_streak = 0
-    check_date = today
-    
-    for record in records:
-        record_date = parse_date(record.date).date()
-        delta = (check_date - record_date).days
-        
-        if delta == 0 or delta == 1:
-            current_streak += 1
-            check_date = record_date
-        elif delta > 1:
-            break
-    
-    return current_streak
+    unique_dates = get_unique_completed_dates(records)
+    return calculate_current_streak(unique_dates)
 
 @router.get("")
 async def list_habits(db: AsyncSession = Depends(get_db)):
@@ -86,6 +155,8 @@ async def get_habit_records(hid: str, start_date: str = None, end_date: str = No
 async def record_habit(hid: str, data: RecordCreate, db: AsyncSession = Depends(get_db)):
     h = await db.get(Habit, hid)
     if not h: raise HTTPException(404, "Not found")
+    
+    await deduplicate_habit_records(db, hid)
     
     existing = await db.execute(
         select(HabitRecord).where(
@@ -143,48 +214,31 @@ async def get_habit_stats(hid: str, db: AsyncSession = Depends(get_db)):
     )
     records = result.scalars().all()
     
-    total_completed = len(records)
+    unique_dates = get_unique_completed_dates(records)
     
-    longest_streak = 0
-    current_streak = 0
-    if records:
-        sorted_dates = sorted([parse_date(r.date) for r in records])
-        longest_streak = 1
-        temp_streak = 1
-        for i in range(1, len(sorted_dates)):
-            delta = (sorted_dates[i] - sorted_dates[i-1]).days
-            if delta == 1:
-                temp_streak += 1
-                longest_streak = max(longest_streak, temp_streak)
-            elif delta > 1:
-                temp_streak = 1
-        
-        current_streak = await recalculate_streak(hid, db)
+    total_completed = len(unique_dates)
+    
+    longest_streak = calculate_longest_streak(unique_dates)
+    current_streak = calculate_current_streak(unique_dates)
     
     today = datetime.now().date()
-    first_date = parse_date(records[0].date).date() if records else today
+    first_date = sorted(unique_dates)[-1] if unique_dates else today
     total_days = (today - first_date).days + 1
     completion_rate = round((total_completed / total_days) * 100, 1) if total_days > 0 else 0
     
-    this_month_start = format_date(datetime(today.year, today.month, 1))
-    this_month_end = format_date(today)
-    month_result = await db.execute(
-        select(func.count(HabitRecord.id)).where(
-            and_(
-                HabitRecord.habit_id == hid,
-                HabitRecord.completed == True,
-                HabitRecord.date >= this_month_start,
-                HabitRecord.date <= this_month_end
-            )
-        )
+    this_month_start = datetime(today.year, today.month, 1).date()
+    this_month_completed = sum(
+        1 for d in unique_dates 
+        if this_month_start <= d <= today
     )
-    this_month_completed = month_result.scalar_one() or 0
     
     last_7_days = []
+    unique_date_strs = {d.strftime("%Y-%m-%d") for d in unique_dates}
     for i in range(6, -1, -1):
         d = format_date(today - timedelta(days=i))
-        completed = any(parse_date(r.date).strftime("%Y-%m-%d") == d for r in records)
-        last_7_days.append({"date": d, "completed": completed})
+        last_7_days.append({"date": d, "completed": d in unique_date_strs})
+    
+    first_record_date = format_date(sorted(unique_dates)[-1]) if unique_dates else None
     
     return {
         "habitId": hid,
@@ -194,9 +248,14 @@ async def get_habit_stats(hid: str, db: AsyncSession = Depends(get_db)):
         "completionRate": completion_rate,
         "thisMonthCompleted": this_month_completed,
         "last7Days": last_7_days,
-        "firstRecordDate": records[0].date if records else None,
+        "firstRecordDate": first_record_date,
         "totalDaysTracked": total_days
     }
+
+@router.post("/deduplicate")
+async def deduplicate_all_records(db: AsyncSession = Depends(get_db)):
+    removed_count = await deduplicate_habit_records(db)
+    return {"message": "deduplication complete", "removed_count": removed_count}
 
 @router.delete("/{hid}")
 async def delete_habit(hid: str, db: AsyncSession = Depends(get_db)):
