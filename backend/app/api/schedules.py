@@ -592,58 +592,128 @@ def _calculate_overlap(
     
     return overlap_minutes, overlap_type
 
+def _is_slot_free(
+    slot_start: datetime,
+    slot_end: datetime,
+    all_schedules: List[Schedule],
+    exclude_id: Optional[str] = None
+) -> bool:
+    for s in all_schedules:
+        if exclude_id and s.id == exclude_id:
+            continue
+        s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
+        s_end = s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time)
+        if slot_start < s_end and slot_end > s_start:
+            return False
+    return True
+
+def _find_free_slot_near(
+    target_start: datetime,
+    duration: int,
+    all_schedules: List[Schedule],
+    exclude_id: Optional[str] = None,
+    direction: str = 'both'
+) -> Optional[datetime]:
+    duration_td = timedelta(minutes=duration)
+    day_start = datetime.combine(target_start.date(), time(7, 0))
+    day_end = datetime.combine(target_start.date(), time(22, 0))
+    
+    if direction in ['earlier', 'both']:
+        current = target_start
+        while current >= day_start:
+            slot_end = current + duration_td
+            if slot_end <= day_end and _is_slot_free(current, slot_end, all_schedules, exclude_id):
+                return current
+            current -= timedelta(minutes=15)
+    
+    if direction in ['later', 'both']:
+        current = target_start + timedelta(minutes=15)
+        while current + duration_td <= day_end:
+            slot_end = current + duration_td
+            if _is_slot_free(current, slot_end, all_schedules, exclude_id):
+                return current
+            current += timedelta(minutes=15)
+    
+    return None
+
 def _generate_local_suggestions(
     new_start: datetime,
     new_end: datetime,
     conflicts: List[Schedule],
+    all_schedules: List[Schedule],
     duration: int,
     priority: str,
-    title: str
+    title: str,
+    exclude_id: Optional[str] = None
 ) -> List[TimeAdjustmentSuggestion]:
     suggestions = []
-    sorted_conflicts = sorted(conflicts, key=lambda s: s.start_time)
+    sorted_conflicts = sorted(conflicts, key=lambda s: s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time))
     
-    earliest = min([s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time) for s in sorted_conflicts])
-    latest = max([s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time) for s in sorted_conflicts])
+    earliest_conflict_start = min([s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time) for s in sorted_conflicts])
+    latest_conflict_end = max([s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time) for s in sorted_conflicts])
     
-    move_earlier_start = earliest - timedelta(minutes=duration) - timedelta(minutes=5)
-    if move_earlier_start.hour >= 7:
-        suggestions.append(TimeAdjustmentSuggestion(
-            suggestion_id="move_earlier",
-            title=title,
-            start_time=move_earlier_start.isoformat(),
-            end_time=(move_earlier_start + timedelta(minutes=duration)).isoformat(),
-            duration_minutes=duration,
-            adjustment_type="move_earlier",
-            reason=f"提前到 {move_earlier_start.strftime('%H:%M')}，避开冲突",
-            score=85 if priority == "high" else 75
-        ))
+    candidate_earlier = earliest_conflict_start - timedelta(minutes=duration) - timedelta(minutes=5)
+    if candidate_earlier.hour >= 7:
+        free_slot = _find_free_slot_near(
+            candidate_earlier, duration, all_schedules, exclude_id, direction='earlier')
+        if free_slot:
+            suggestions.append(TimeAdjustmentSuggestion(
+                suggestion_id="move_earlier",
+                title=title,
+                start_time=free_slot.isoformat(),
+                end_time=(free_slot + timedelta(minutes=duration)).isoformat(),
+                duration_minutes=duration,
+                adjustment_type="move_earlier",
+                reason=f"提前到 {free_slot.strftime('%H:%M')}，避开冲突",
+                score=85 if priority == "high" else 75
+            ))
     
-    move_later_start = latest + timedelta(minutes=5)
-    if move_later_start.hour < 22:
-        suggestions.append(TimeAdjustmentSuggestion(
-            suggestion_id="move_later",
-            title=title,
-            start_time=move_later_start.isoformat(),
-            end_time=(move_later_start + timedelta(minutes=duration)).isoformat(),
-            duration_minutes=duration,
-            adjustment_type="move_later",
-            reason=f"延后到 {move_later_start.strftime('%H:%M')}，避开冲突",
-            score=80 if priority == "high" else 70
-        ))
+    candidate_later = latest_conflict_end + timedelta(minutes=5)
+    if candidate_later.hour < 22:
+        free_slot = _find_free_slot_near(
+            candidate_later, duration, all_schedules, exclude_id, direction='later')
+        if free_slot:
+            suggestions.append(TimeAdjustmentSuggestion(
+                suggestion_id="move_later",
+                title=title,
+                start_time=free_slot.isoformat(),
+                end_time=(free_slot + timedelta(minutes=duration)).isoformat(),
+                duration_minutes=duration,
+                adjustment_type="move_later",
+                reason=f"延后到 {free_slot.strftime('%H:%M')}，避开冲突",
+                score=80 if priority == "high" else 70
+            ))
     
     if duration > 30:
         shorter_duration = max(15, duration - 15)
-        suggestions.append(TimeAdjustmentSuggestion(
-            suggestion_id="shorten",
-            title=title,
-            start_time=new_start.isoformat(),
-            end_time=(new_start + timedelta(minutes=shorter_duration)).isoformat(),
-            duration_minutes=shorter_duration,
-            adjustment_type="shorten",
-            reason=f"缩短时长到 {shorter_duration} 分钟，保留原时段",
-            score=65
-        ))
+        shorter_end = new_start + timedelta(minutes=shorter_duration)
+        if _is_slot_free(new_start, shorter_end, all_schedules, exclude_id):
+            suggestions.append(TimeAdjustmentSuggestion(
+                suggestion_id="shorten",
+                title=title,
+                start_time=new_start.isoformat(),
+                end_time=shorter_end.isoformat(),
+                duration_minutes=shorter_duration,
+                adjustment_type="shorten",
+                reason=f"缩短时长到 {shorter_duration} 分钟，保留原时段",
+                score=65
+            ))
+    
+    if not suggestions:
+        free_slot = _find_free_slot_near(
+            new_start, duration, all_schedules, exclude_id, direction='both')
+        if free_slot:
+            adj_type = "move_earlier" if free_slot < new_start else "move_later"
+            suggestions.append(TimeAdjustmentSuggestion(
+                suggestion_id="find_free",
+                title=title,
+                start_time=free_slot.isoformat(),
+                end_time=(free_slot + timedelta(minutes=duration)).isoformat(),
+                duration_minutes=duration,
+                adjustment_type=adj_type,
+                reason=f"安排到 {free_slot.strftime('%H:%M')}，最近的空闲时段",
+                score=70
+            ))
     
     return suggestions
 
@@ -667,18 +737,39 @@ async def check_conflict(
             severity="low"
         )
     
+    day_start = datetime.combine(start_dt.date(), time(0, 0))
+    day_end = datetime.combine(start_dt.date(), time(23, 59, 59))
+    all_schedules_q = select(Schedule).where(
+        and_(
+            Schedule.start_time >= day_start,
+            Schedule.end_time <= day_end,
+            Schedule.completed == False
+        )
+    )
+    if data.exclude_id:
+        all_schedules_q = all_schedules_q.where(Schedule.id != data.exclude_id)
+    all_schedules_result = await db.execute(all_schedules_q)
+    all_schedules = list(all_schedules_result.scalars().all())
+    
     conflict_details_list = []
     total_overlap = 0
-    affected_start = start_dt
-    affected_end = end_dt
+    overlap_start = start_dt
+    overlap_end = start_dt
     
     for s in conflicts:
         s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
         s_end = s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time)
         overlap_minutes, overlap_type = _calculate_overlap(start_dt, end_dt, s_start, s_end)
         total_overlap += overlap_minutes
-        affected_start = min(affected_start, s_start)
-        affected_end = max(affected_end, s_end)
+        
+        s_overlap_start = max(start_dt, s_start)
+        s_overlap_end = min(end_dt, s_end)
+        if total_overlap == overlap_minutes:
+            overlap_start = s_overlap_start
+            overlap_end = s_overlap_end
+        else:
+            overlap_start = min(overlap_start, s_overlap_start)
+            overlap_end = max(overlap_end, s_overlap_end)
         
         conflict_details_list.append(ConflictDetail(
             schedule_id=s.id,
@@ -696,9 +787,10 @@ async def check_conflict(
     severity = "high" if total_overlap >= 60 or len(conflicts) >= 2 else "medium"
     
     suggestions = _generate_local_suggestions(
-        start_dt, end_dt, conflicts, duration,
-        data.__dict__.get('priority', 'medium') if hasattr(data, 'priority') else 'medium',
-        data.__dict__.get('title', '日程') if hasattr(data, 'title') else '日程'
+        start_dt, end_dt, conflicts, all_schedules, duration,
+        data.priority if data.priority else 'medium',
+        data.title if data.title else '日程',
+        data.exclude_id
     )
     
     if duration >= 30:
@@ -738,8 +830,8 @@ async def check_conflict(
         message=f"该时间段与以下日程冲突：{conflict_titles}",
         conflict_details=conflict_details_list,
         affected_time_range={
-            "start": affected_start.isoformat(),
-            "end": affected_end.isoformat(),
+            "start": overlap_start.isoformat(),
+            "end": overlap_end.isoformat(),
             "total_overlap_minutes": total_overlap
         },
         suggestions=suggestions[:5],

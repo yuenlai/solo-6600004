@@ -139,6 +139,10 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     setEndDate(newEndDate);
     setStartTime(newStartTime);
     setEndTime(newEndTime);
+    
+    setTimeout(() => {
+      checkConflict();
+    }, 50);
   };
   
   const handleSave = async () => {

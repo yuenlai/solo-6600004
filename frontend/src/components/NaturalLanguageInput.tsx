@@ -142,14 +142,18 @@ export const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({ onCl
     setPreview(prev => prev.map(s => {
       if (s.id !== scheduleId) return s;
       
-      const scheduleDate = s.tempStartTime.split('T')[0];
-      const newTime = field === 'start' 
-        ? `${scheduleDate}T${value}:00`
-        : `${scheduleDate}T${value}:00`;
+      const currentIso = field === 'start' ? s.tempStartTime : s.tempEndTime;
+      const scheduleDate = currentIso.split('T')[0];
+      const newTime = `${scheduleDate}T${value}:00`;
       
       const updated = field === 'start'
         ? { ...s, tempStartTime: newTime }
         : { ...s, tempEndTime: newTime };
+      
+      const duration = getDurationMinutes(updated.tempStartTime, updated.tempEndTime);
+      if (duration < 5) {
+        return updated;
+      }
       
       checkSingleConflict(updated);
       return updated;
