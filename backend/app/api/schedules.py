@@ -129,12 +129,15 @@ def _parse_time_expression(time_str: str, base_date: str) -> Optional[datetime]:
             hour = int(colon_match.group(1))
             minute = int(colon_match.group(2))
         else:
-            num_match = re.match(r'(\d{1,2})点', time_str)
+            num_match = re.match(r'(\d{1,2})点(?:\s*(\d{1,2})\s*分?)?', time_str)
             if num_match:
                 hour = int(num_match.group(1))
-                half_match = re.search(r'半', time_str)
-                if half_match:
-                    minute = 30
+                if num_match.group(2):
+                    minute = int(num_match.group(2))
+                else:
+                    half_match = re.search(r'半', time_str)
+                    if half_match:
+                        minute = 30
 
     return base_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
@@ -150,6 +153,7 @@ def _parse_schedule_line(line: str, base_date: str) -> Optional[ParsedSchedule]:
 
     single_time_patterns = [
         r'((?:凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|晚间|夜里|深夜)\s*\d{1,2}[点时](?:\d{1,2}分?|半)?)',
+        r'((?<![:\d])\d{1,2}点(?:\d{1,2}分?|半)?(?![:\d]))',
         r'(\d{1,2}:\d{2})',
     ]
 
