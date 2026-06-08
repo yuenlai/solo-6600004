@@ -370,3 +370,20 @@ export interface FragmentRecommendation {
   suggestions: MicroTask[];
   reason: string;
 }
+
+export type TimeRange = 'morning' | 'afternoon' | 'evening' | 'night' | 'all';
+
+export type GroupBy = 'none' | 'category' | 'priority' | 'time' | 'completed';
+
+export interface ScheduleFilter {
+  categories: string[];
+  priorities: ('low' | 'medium' | 'high')[];
+  completed: 'all' | 'completed' | 'incomplete';
+  timeRange: TimeRange;
+}
+
+export interface FilterState {
+  filter: ScheduleFilter;
+  groupBy: GroupBy;
+  showFilters: boolean;
+}

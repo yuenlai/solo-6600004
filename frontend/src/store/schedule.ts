@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation } from '../types';
+import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation, ScheduleFilter, GroupBy } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi, fragmentTimeApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
@@ -156,6 +156,16 @@ interface ScheduleState {
   loadFragmentRecommendations: (date?: string, maxDuration?: number, minDuration?: number) => Promise<void>;
   confirmFragmentTask: (microTaskId: string, startTime: string, endTime: string, date: string) => Promise<Schedule | null>;
   clearFragmentRecommendations: () => void;
+  filter: ScheduleFilter;
+  groupBy: GroupBy;
+  showFilters: boolean;
+  setFilter: (filter: Partial<ScheduleFilter>) => void;
+  setGroupBy: (groupBy: GroupBy) => void;
+  toggleShowFilters: () => void;
+  resetFilters: () => void;
+  getFilteredSchedules: (schedules: Schedule[], date?: string) => Schedule[];
+  getGroupedSchedules: (schedules: Schedule[]) => Map<string, Schedule[]>;
+  getUniqueCategories: () => string[];
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -183,6 +193,115 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   microTasks: [],
   fragmentRecommendations: [],
   fragmentRecommendationsLoading: false,
+  filter: {
+    categories: [],
+    priorities: [],
+    completed: 'all',
+    timeRange: 'all'
+  },
+  groupBy: 'none',
+  showFilters: false,
+  setFilter: (newFilter) => set((state) => ({
+    filter: { ...state.filter, ...newFilter }
+  })),
+  setGroupBy: (groupBy) => set({ groupBy }),
+  toggleShowFilters: () => set((state) => ({ showFilters: !state.showFilters })),
+  resetFilters: () => set({
+    filter: {
+      categories: [],
+      priorities: [],
+      completed: 'all',
+      timeRange: 'all'
+    },
+    groupBy: 'none'
+  }),
+  getUniqueCategories: () => {
+    const categories = new Set(get().schedules.map(s => s.category));
+    return Array.from(categories).sort();
+  },
+  getFilteredSchedules: (schedules, date) => {
+    const { filter } = get();
+    let filtered = [...schedules];
+
+    if (date) {
+      filtered = filtered.filter(s => s.startTime.startsWith(date));
+    }
+
+    if (filter.categories.length > 0) {
+      filtered = filtered.filter(s => filter.categories.includes(s.category));
+    }
+
+    if (filter.priorities.length > 0) {
+      filtered = filtered.filter(s => filter.priorities.includes(s.priority));
+    }
+
+    if (filter.completed !== 'all') {
+      filtered = filtered.filter(s => 
+        filter.completed === 'completed' ? s.completed : !s.completed
+      );
+    }
+
+    if (filter.timeRange !== 'all') {
+      filtered = filtered.filter(s => {
+        const hour = parseInt(s.startTime.split('T')[1]?.substring(0, 2) || '0');
+        switch (filter.timeRange) {
+          case 'morning': return hour >= 6 && hour < 12;
+          case 'afternoon': return hour >= 12 && hour < 18;
+          case 'evening': return hour >= 18 && hour < 22;
+          case 'night': return hour >= 22 || hour < 6;
+          default: return true;
+        }
+      });
+    }
+
+    return filtered.sort((a, b) => 
+      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+  },
+  getGroupedSchedules: (schedules) => {
+    const { groupBy } = get();
+    const groups = new Map<string, Schedule[]>();
+
+    if (groupBy === 'none') {
+      groups.set('全部', schedules);
+      return groups;
+    }
+
+    schedules.forEach(schedule => {
+      let key: string;
+      switch (groupBy) {
+        case 'category':
+          key = schedule.category || '未分类';
+          break;
+        case 'priority':
+          key = schedule.priority === 'high' ? '🔴 高优先级' : 
+                schedule.priority === 'medium' ? '🟡 中优先级' : '🟢 低优先级';
+          break;
+        case 'time': {
+          const hour = parseInt(schedule.startTime.split('T')[1]?.substring(0, 2) || '0');
+          if (hour >= 6 && hour < 12) key = '🌅 上午 (06:00-12:00)';
+          else if (hour >= 12 && hour < 18) key = '☀️ 下午 (12:00-18:00)';
+          else if (hour >= 18 && hour < 22) key = '🌆 傍晚 (18:00-22:00)';
+          else key = '🌙 夜间 (22:00-06:00)';
+          break;
+        }
+        case 'completed':
+          key = schedule.completed ? '✅ 已完成' : '⏳ 待完成';
+          break;
+        default:
+          key = '全部';
+      }
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(schedule);
+    });
+
+    const sortedKeys = Array.from(groups.keys()).sort();
+    const sortedGroups = new Map<string, Schedule[]>();
+    sortedKeys.forEach(key => sortedGroups.set(key, groups.get(key)!));
+    return sortedGroups;
+  },
   setCurrentUser: (name) => {
     localStorage.setItem('currentUser', name);
     set({ currentUser: name });

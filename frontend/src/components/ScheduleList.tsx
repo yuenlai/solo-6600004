@@ -7,6 +7,7 @@ import { ChallengeCard } from './HabitChallengeCard';
 import { DragDropScheduler } from './DragDropScheduler';
 import { MultiDayView } from './MultiDayView';
 import { ShareScheduleDialog } from './ShareScheduleDialog';
+import { FilterPanel } from './FilterPanel';
 
 const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -96,7 +97,7 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule, o
 };
 
 export const ScheduleList: React.FC = () => {
-  const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge, exceptionDays, applyExceptionDay, loadOutgoingShares } = useScheduleStore();
+  const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge, exceptionDays, applyExceptionDay, loadOutgoingShares, showFilters, toggleShowFilters, getFilteredSchedules, getGroupedSchedules, filter, groupBy } = useScheduleStore();
   const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
   const [shareSchedule, setShareSchedule] = useState<Schedule | null>(null);
   const activeChallenges = challenges.filter(c => c.status === 'active');
@@ -141,8 +142,10 @@ export const ScheduleList: React.FC = () => {
   };
 
   const renderDayView = () => {
-    const daySchedules = schedules.filter(s => s.startTime.startsWith(selectedDate));
     const todayException = getExceptionDayForDate(selectedDate);
+    const filteredSchedules = getFilteredSchedules(schedules, selectedDate);
+    const groupedSchedules = getGroupedSchedules(filteredSchedules);
+    const totalToday = schedules.filter(s => s.startTime.startsWith(selectedDate)).length;
     
     const typeConfig: Record<string, { label: string; icon: string; color: string; bgColor: string }> = {
       holiday: { label: '节假日', icon: '🎉', color: '#c62828', bgColor: '#ffebee' },
@@ -151,121 +154,183 @@ export const ScheduleList: React.FC = () => {
       custom: { label: '自定义', icon: '📅', color: '#6a1b9a', bgColor: '#f3e5f5' },
     };
 
+    const hasActiveFilters = filter.categories.length > 0 || 
+      filter.priorities.length > 0 || 
+      filter.completed !== 'all' || 
+      filter.timeRange !== 'all' ||
+      groupBy !== 'none';
+
     return (
-      <div style={{ padding: '16px' }}>
-        {todayException && (
-          <div style={{
-            padding: '16px', borderRadius: '10px', marginBottom: '20px',
-            background: typeConfig[todayException.type]?.bgColor || '#f5f5f5',
-            border: `1px solid ${typeConfig[todayException.type]?.color || '#ddd'}30`
-          }}>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {showFilters && <FilterPanel />}
+        <div style={{ padding: '16px' }}>
+          {todayException && (
             <div style={{
-              display: 'flex', justifyContent: 'space-between',
-              alignItems: 'flex-start', gap: '16px'
+              padding: '16px', borderRadius: '10px', marginBottom: '20px',
+              background: typeConfig[todayException.type]?.bgColor || '#f5f5f5',
+              border: `1px solid ${typeConfig[todayException.type]?.color || '#ddd'}30`
             }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <div style={{
-                  fontSize: '32px', width: '50px', height: '50px',
-                  borderRadius: '10px', background: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {typeConfig[todayException.type]?.icon || '📅'}
-                </div>
-                <div>
-                  <h3 style={{
-                    margin: '0 0 4px', fontSize: '16px',
-                    color: typeConfig[todayException.type]?.color || '#333'
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'flex-start', gap: '16px'
+              }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div style={{
+                    fontSize: '32px', width: '50px', height: '50px',
+                    borderRadius: '10px', background: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0
                   }}>
-                    {todayException.name}
-                  </h3>
-                  <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>
-                    {typeConfig[todayException.type]?.label || '自定义'} · {todayException.date}
+                    {typeConfig[todayException.type]?.icon || '📅'}
                   </div>
-                  {todayException.description && (
-                    <div style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>
-                      {todayException.description}
+                  <div>
+                    <h3 style={{
+                      margin: '0 0 4px', fontSize: '16px',
+                      color: typeConfig[todayException.type]?.color || '#333'
+                    }}>
+                      {todayException.name}
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>
+                      {typeConfig[todayException.type]?.label || '自定义'} · {todayException.date}
                     </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {todayException.rule?.skipHabits && (
-                      <span style={{
-                        padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
-                        background: '#fff', border: '1px solid #e0e0e0', color: '#666'
-                      }}>
-                        🚫 跳过习惯 {todayException.rule.habitIdsToSkip?.length > 0 ? `(${todayException.rule.habitIdsToSkip.length}个)` : ''}
-                      </span>
+                    {todayException.description && (
+                      <div style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>
+                        {todayException.description}
+                      </div>
                     )}
-                    {todayException.rule?.skipSchedules && (
-                      <span style={{
-                        padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
-                        background: '#fff', border: '1px solid #e0e0e0', color: '#666'
-                      }}>
-                        🚫 跳过日程 {todayException.rule.scheduleCategoriesToSkip?.length > 0 ? `(${todayException.rule.scheduleCategoriesToSkip.join(', ')})` : ''}
-                      </span>
-                    )}
-                    {todayException.rule?.rescheduleToNextWorkingDay && (
-                      <span style={{
-                        padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
-                        background: '#fff', border: '1px solid #e0e0e0', color: '#666'
-                      }}>
-                        🔄 自动改期到下一个工作日
-                      </span>
-                    )}
-                    {todayException.rule?.adjustWorkHours && (
-                      <span style={{
-                        padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
-                        background: '#fff', border: '1px solid #e0e0e0', color: '#666'
-                      }}>
-                        ⏰ 工作时间: {todayException.rule.workStartTime || '09:00'} - {todayException.rule.workEndTime || '18:00'}
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {todayException.rule?.skipHabits && (
+                        <span style={{
+                          padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
+                          background: '#fff', border: '1px solid #e0e0e0', color: '#666'
+                        }}>
+                          🚫 跳过习惯 {todayException.rule.habitIdsToSkip?.length > 0 ? `(${todayException.rule.habitIdsToSkip.length}个)` : ''}
+                        </span>
+                      )}
+                      {todayException.rule?.skipSchedules && (
+                        <span style={{
+                          padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
+                          background: '#fff', border: '1px solid #e0e0e0', color: '#666'
+                        }}>
+                          🚫 跳过日程 {todayException.rule.scheduleCategoriesToSkip?.length > 0 ? `(${todayException.rule.scheduleCategoriesToSkip.join(', ')})` : ''}
+                        </span>
+                      )}
+                      {todayException.rule?.rescheduleToNextWorkingDay && (
+                        <span style={{
+                          padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
+                          background: '#fff', border: '1px solid #e0e0e0', color: '#666'
+                        }}>
+                          🔄 自动改期到下一个工作日
+                        </span>
+                      )}
+                      {todayException.rule?.adjustWorkHours && (
+                        <span style={{
+                          padding: '3px 10px', fontSize: '11px', borderRadius: '12px',
+                          background: '#fff', border: '1px solid #e0e0e0', color: '#666'
+                        }}>
+                          ⏰ 工作时间: {todayException.rule.workStartTime || '09:00'} - {todayException.rule.workEndTime || '18:00'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={async () => {
+                    if (confirm('应用规则将修改今天的日程安排，确定继续吗？')) {
+                      await applyExceptionDay(todayException.id);
+                      window.location.reload();
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px', borderRadius: '6px',
+                    border: '1px solid #4caf50', background: '#fff',
+                    color: '#4caf50', cursor: 'pointer', fontSize: '13px',
+                    flexShrink: 0
+                  }}
+                >
+                  应用规则
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  if (confirm('应用规则将修改今天的日程安排，确定继续吗？')) {
-                    await applyExceptionDay(todayException.id);
-                    window.location.reload();
-                  }
-                }}
-                style={{
-                  padding: '8px 16px', borderRadius: '6px',
-                  border: '1px solid #4caf50', background: '#fff',
-                  color: '#4caf50', cursor: 'pointer', fontSize: '13px',
-                  flexShrink: 0
-                }}
-              >
-                应用规则
-              </button>
             </div>
-          </div>
-        )}
-        {activeChallenges.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '16px' }}>
-              🔥 我的挑战 ({activeChallenges.length})
-            </h3>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: '12px'
-            }}>
-              {activeChallenges.map(c => (
-                <ChallengeCard
-                  key={c.id}
-                  challenge={c}
-                  onDelete={() => handleDeleteChallenge(c.id)}
-                />
-              ))}
+          )}
+          {activeChallenges.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '16px' }}>
+                🔥 我的挑战 ({activeChallenges.length})
+              </h3>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: '12px'
+              }}>
+                {activeChallenges.map(c => (
+                  <ChallengeCard
+                    key={c.id}
+                    challenge={c}
+                    onDelete={() => handleDeleteChallenge(c.id)}
+                  />
+                ))}
+              </div>
             </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0 }}>📅 {selectedDate} 日程</h2>
+            {hasActiveFilters && (
+              <span style={{
+                fontSize: '12px',
+                color: '#ff5722',
+                background: '#fff3e0',
+                padding: '4px 12px',
+                borderRadius: '12px'
+              }}>
+                已筛选 {filteredSchedules.length} / {totalToday} 条
+                {groupBy !== 'none' && ` · 按${groupBy === 'category' ? '分类' : groupBy === 'priority' ? '优先级' : groupBy === 'time' ? '时间' : '状态'}分组`}
+              </span>
+            )}
           </div>
-        )}
-        <h2 style={{ margin: '0 0 16px' }}>📅 {selectedDate} 日程</h2>
-        {daySchedules.length === 0 ? (
-          <p style={{ color: '#999', textAlign: 'center', marginTop: '40px' }}>暂无日程安排</p>
-        ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} onReschedule={handleReschedule} onShare={handleShare} />)}
+          {filteredSchedules.length === 0 ? (
+            <p style={{ color: '#999', textAlign: 'center', marginTop: '40px' }}>
+              {totalToday === 0 ? '暂无日程安排' : '没有符合筛选条件的日程'}
+            </p>
+          ) : (
+            Array.from(groupedSchedules.entries()).map(([groupKey, groupSchedules]) => (
+              <div key={groupKey} style={{ marginBottom: '24px' }}>
+                {groupBy !== 'none' && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '12px',
+                    padding: '8px 12px',
+                    background: '#f5f5f5',
+                    borderRadius: '6px'
+                  }}>
+                    <span style={{ fontWeight: 600, fontSize: '14px', color: '#333' }}>
+                      {groupKey}
+                    </span>
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#666',
+                      background: '#e0e0e0',
+                      padding: '2px 8px',
+                      borderRadius: '10px'
+                    }}>
+                      {groupSchedules.length} 条
+                    </span>
+                  </div>
+                )}
+                {groupSchedules.map(s => (
+                  <ScheduleItem 
+                    key={s.id} 
+                    s={s} 
+                    onReschedule={handleReschedule} 
+                    onShare={handleShare} 
+                  />
+                ))}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     );
   };
@@ -419,6 +484,33 @@ export const ScheduleList: React.FC = () => {
                 fontSize: '13px',
               }}
             >多日视图</button>
+            {viewMode === 'day' && (
+              <button
+                onClick={toggleShowFilters}
+                style={{
+                  marginLeft: '16px',
+                  padding: '6px 16px',
+                  border: `1px solid ${showFilters ? '#4caf50' : '#ddd'}`,
+                  borderRadius: '16px',
+                  background: showFilters ? '#4caf50' : '#fff',
+                  color: showFilters ? '#fff' : '#333',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                }}
+              >
+                🔍 筛选
+                {(filter.categories.length > 0 || filter.priorities.length > 0 || filter.completed !== 'all' || filter.timeRange !== 'all' || groupBy !== 'none') && (
+                  <span style={{
+                    marginLeft: '6px',
+                    background: showFilters ? '#fff' : '#ff5722',
+                    color: showFilters ? '#4caf50' : '#fff',
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '10px'
+                  }}>●</span>
+                )}
+              </button>
+            )}
             {viewMode === 'week' && (
               <span style={{ marginLeft: '12px', fontSize: '12px', color: '#999' }}>
                 💡 点击日期可切换到日视图
