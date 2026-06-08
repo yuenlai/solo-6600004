@@ -3,6 +3,7 @@ import { useScheduleStore } from '../store/schedule';
 import { HabitChallengeCreator } from './HabitChallengeCreator';
 import { HabitChallengeCard } from './HabitChallengeCard';
 import { HabitStats } from '../types';
+import { getHabitCompletionMap as getCompletionMap } from '../utils/habitUtils';
 
 const formatDate = (date: Date): string => {
   return date.toISOString().split('T')[0];
@@ -105,11 +106,7 @@ export const HabitTracker: React.FC = () => {
   };
 
   const getHabitCompletionMap = (habit: typeof habits[0]): Map<string, boolean> => {
-    const map = new Map<string, boolean>();
-    habit.history.forEach(r => {
-      if (r.completed) map.set(r.date, true);
-    });
-    return map;
+    return getCompletionMap(habit.history);
   };
 
   const prevMonth = () => {

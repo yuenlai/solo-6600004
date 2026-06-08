@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Schedule, Habit, HabitStats, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation, ScheduleFilter, GroupBy } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi, fragmentTimeApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
+import { deduplicateHabitRecords } from '../utils/habitUtils';
 
 interface ScheduleState {
   schedules: Schedule[];
@@ -702,7 +703,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
           } else {
             newHistory = [...h.history, { date, completed: value >= h.target, value }];
           }
-          return { ...h, history: newHistory, currentStreak: parseInt(streak) };
+          const deduplicatedHistory = deduplicateHabitRecords(newHistory);
+          return { ...h, history: deduplicatedHistory, currentStreak: parseInt(streak) };
         })
       });
       
@@ -721,8 +723,10 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         value: parseInt(r.value)
       }));
       
+      const deduplicatedRecords = deduplicateHabitRecords(records);
+      
       set({
-        habits: get().habits.map(h => h.id === habitId ? { ...h, history: records } : h)
+        habits: get().habits.map(h => h.id === habitId ? { ...h, history: deduplicatedRecords } : h)
       });
     } catch (e) {
       console.error('Failed to load habit records:', e);
@@ -753,7 +757,14 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       const stats: HabitStats = res.data;
       const newStats = new Map(get().habitStats);
       newStats.set(habitId, stats);
-      set({ habitStats: newStats });
+      
+      set({
+        habitStats: newStats,
+        habits: get().habits.map(h => 
+          h.id === habitId ? { ...h, currentStreak: stats.currentStreak } : h
+        )
+      });
+      
       return stats;
     } catch (e) {
       console.error('Failed to load habit stats:', e);
