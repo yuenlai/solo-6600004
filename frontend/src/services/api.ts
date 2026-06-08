@@ -10,8 +10,13 @@ export const scheduleApi = {
   parse: (text: string, date?: string) => api.post('/schedules/parse', { text, date }),
   batchCreate: (data: any[]) => api.post('/schedules/batch-create', data),
   batchParse: (text: string, date?: string, save?: boolean) => api.post('/schedules/batch-parse', { text, date, save }),
-  checkConflict: (startTime: string, endTime: string, excludeId?: string) =>
-    api.post('/schedules/check-conflict', { start_time: startTime, end_time: endTime, exclude_id: excludeId }),
+  checkConflict: (startTime: string, endTime: string, excludeId?: string, extra?: { title?: string; priority?: string; category?: string }) =>
+    api.post('/schedules/check-conflict', { 
+      start_time: startTime, 
+      end_time: endTime, 
+      exclude_id: excludeId,
+      ...(extra || {})
+    }),
   getRescheduleOptions: (data: {
     scheduleId?: string;
     title: string;

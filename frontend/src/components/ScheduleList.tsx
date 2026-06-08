@@ -3,6 +3,7 @@ import { useScheduleStore } from '../store/schedule';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 import { Schedule } from '../types';
 import { RescheduleAssistant } from './RescheduleAssistant';
+import { ScheduleEditor } from './ScheduleEditor';
 import { ChallengeCard } from './HabitChallengeCard';
 import { DragDropScheduler } from './DragDropScheduler';
 import { MultiDayView } from './MultiDayView';
@@ -16,9 +17,10 @@ interface ScheduleItemProps {
   compact?: boolean;
   onReschedule: (schedule: Schedule) => void;
   onShare: (schedule: Schedule) => void;
+  onEdit: (schedule: Schedule) => void;
 }
 
-const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule, onShare }) => {
+const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule, onShare, onEdit }) => {
   const { toggleComplete, deleteSchedule } = useScheduleStore();
   const isShared = !!s.sharedFrom;
 
@@ -75,6 +77,19 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ s, compact, onReschedule, o
           📤
         </button>
       )}
+      {!compact && !s.completed && !isShared && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(s); }}
+          style={{
+            border: 'none', background: 'none', cursor: 'pointer',
+            color: '#1976d2', fontSize: '14px', padding: '4px 8px',
+            borderRadius: '4px'
+          }}
+          title="编辑日程"
+        >
+          ✏️
+        </button>
+      )}
       {!compact && !s.completed && (
         <button
           onClick={(e) => { e.stopPropagation(); onReschedule(s); }}
@@ -100,6 +115,7 @@ export const ScheduleList: React.FC = () => {
   const { schedules, selectedDate, viewMode, scheduleViewMode, setViewMode, setScheduleViewMode, setSelectedDate, challenges, deleteChallenge, exceptionDays, applyExceptionDay, loadOutgoingShares, showFilters, toggleShowFilters, getFilteredSchedules, getGroupedSchedules, filter, groupBy } = useScheduleStore();
   const [rescheduleSchedule, setRescheduleSchedule] = useState<Schedule | null>(null);
   const [shareSchedule, setShareSchedule] = useState<Schedule | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const activeChallenges = challenges.filter(c => c.status === 'active');
 
   const handleShare = (schedule: Schedule) => {
@@ -120,6 +136,10 @@ export const ScheduleList: React.FC = () => {
 
   const handleReschedule = (schedule: Schedule) => {
     setRescheduleSchedule(schedule);
+  };
+
+  const handleEdit = (schedule: Schedule) => {
+    setEditingSchedule(schedule);
   };
 
   const getWeekDates = () => {
@@ -324,7 +344,8 @@ export const ScheduleList: React.FC = () => {
                     key={s.id} 
                     s={s} 
                     onReschedule={handleReschedule} 
-                    onShare={handleShare} 
+                    onShare={handleShare}
+                    onEdit={handleEdit}
                   />
                 ))}
               </div>
@@ -399,7 +420,7 @@ export const ScheduleList: React.FC = () => {
                     <p style={{ color: '#ccc', textAlign: 'center', fontSize: '11px', marginTop: '20px' }}>
                       空
                     </p>
-                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact onReschedule={handleReschedule} onShare={handleShare} />)}
+                  ) : daySchedules.map(s => <ScheduleItem key={s.id} s={s} compact onReschedule={handleReschedule} onShare={handleShare} onEdit={handleEdit} />)}
                 </div>
               </div>
             );
@@ -550,6 +571,14 @@ export const ScheduleList: React.FC = () => {
           schedule={shareSchedule}
           onClose={() => setShareSchedule(null)}
           onShared={handleShared}
+        />
+      )}
+      {editingSchedule && (
+        <ScheduleEditor
+          mode="edit"
+          initialSchedule={editingSchedule}
+          onClose={() => setEditingSchedule(null)}
+          onSaved={() => setEditingSchedule(null)}
         />
       )}
     </>

@@ -33,11 +33,37 @@ class ConflictCheckRequest(BaseModel):
     start_time: str
     end_time: str
     exclude_id: Optional[str] = None
+    title: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+
+class ConflictDetail(BaseModel):
+    schedule_id: str
+    title: str
+    start_time: str
+    end_time: str
+    priority: str
+    overlap_minutes: int
+    overlap_type: str
+
+class TimeAdjustmentSuggestion(BaseModel):
+    suggestion_id: str
+    title: str
+    start_time: str
+    end_time: str
+    duration_minutes: int
+    adjustment_type: str
+    reason: str
+    score: int
 
 class ConflictInfo(BaseModel):
     has_conflict: bool
     conflicting_schedules: List[dict]
     message: str
+    conflict_details: Optional[List[ConflictDetail]] = None
+    affected_time_range: Optional[dict] = None
+    suggestions: Optional[List[TimeAdjustmentSuggestion]] = None
+    severity: Optional[str] = None
 
 class RescheduleOption(BaseModel):
     option_id: str
@@ -545,6 +571,82 @@ async def _generate_reschedule_options(
     
     return options
 
+def _calculate_overlap(
+    new_start: datetime,
+    new_end: datetime,
+    existing_start: datetime,
+    existing_end: datetime
+) -> Tuple[int, str]:
+    overlap_start = max(new_start, existing_start)
+    overlap_end = min(new_end, existing_end)
+    overlap_minutes = int((overlap_end - overlap_start).total_seconds() / 60)
+    
+    if new_start >= existing_start and new_end <= existing_end:
+        overlap_type = "full"
+    elif new_start < existing_start and new_end > existing_end:
+        overlap_type = "contains"
+    elif new_start < existing_start:
+        overlap_type = "partial_start"
+    else:
+        overlap_type = "partial_end"
+    
+    return overlap_minutes, overlap_type
+
+def _generate_local_suggestions(
+    new_start: datetime,
+    new_end: datetime,
+    conflicts: List[Schedule],
+    duration: int,
+    priority: str,
+    title: str
+) -> List[TimeAdjustmentSuggestion]:
+    suggestions = []
+    sorted_conflicts = sorted(conflicts, key=lambda s: s.start_time)
+    
+    earliest = min([s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time) for s in sorted_conflicts])
+    latest = max([s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time) for s in sorted_conflicts])
+    
+    move_earlier_start = earliest - timedelta(minutes=duration) - timedelta(minutes=5)
+    if move_earlier_start.hour >= 7:
+        suggestions.append(TimeAdjustmentSuggestion(
+            suggestion_id="move_earlier",
+            title=title,
+            start_time=move_earlier_start.isoformat(),
+            end_time=(move_earlier_start + timedelta(minutes=duration)).isoformat(),
+            duration_minutes=duration,
+            adjustment_type="move_earlier",
+            reason=f"提前到 {move_earlier_start.strftime('%H:%M')}，避开冲突",
+            score=85 if priority == "high" else 75
+        ))
+    
+    move_later_start = latest + timedelta(minutes=5)
+    if move_later_start.hour < 22:
+        suggestions.append(TimeAdjustmentSuggestion(
+            suggestion_id="move_later",
+            title=title,
+            start_time=move_later_start.isoformat(),
+            end_time=(move_later_start + timedelta(minutes=duration)).isoformat(),
+            duration_minutes=duration,
+            adjustment_type="move_later",
+            reason=f"延后到 {move_later_start.strftime('%H:%M')}，避开冲突",
+            score=80 if priority == "high" else 70
+        ))
+    
+    if duration > 30:
+        shorter_duration = max(15, duration - 15)
+        suggestions.append(TimeAdjustmentSuggestion(
+            suggestion_id="shorten",
+            title=title,
+            start_time=new_start.isoformat(),
+            end_time=(new_start + timedelta(minutes=shorter_duration)).isoformat(),
+            duration_minutes=shorter_duration,
+            adjustment_type="shorten",
+            reason=f"缩短时长到 {shorter_duration} 分钟，保留原时段",
+            score=65
+        ))
+    
+    return suggestions
+
 @router.post("/check-conflict", response_model=ConflictInfo)
 async def check_conflict(
     data: ConflictCheckRequest,
@@ -552,6 +654,7 @@ async def check_conflict(
 ):
     start_dt = _parse_datetime(data.start_time)
     end_dt = _parse_datetime(data.end_time)
+    duration = int((end_dt - start_dt).total_seconds() / 60)
     
     conflicts = await _check_conflicts(db, start_dt, end_dt, data.exclude_id)
     
@@ -559,16 +662,88 @@ async def check_conflict(
         return ConflictInfo(
             has_conflict=False,
             conflicting_schedules=[],
-            message="该时间段无冲突，可以安排"
+            message="该时间段无冲突，可以安排",
+            conflict_details=[],
+            severity="low"
         )
     
-    conflict_details = [_schedule_to_dict(s) for s in conflicts]
-    conflict_titles = "、".join([s['title'] for s in conflict_details])
+    conflict_details_list = []
+    total_overlap = 0
+    affected_start = start_dt
+    affected_end = end_dt
+    
+    for s in conflicts:
+        s_start = s.start_time if isinstance(s.start_time, datetime) else _parse_datetime(s.start_time)
+        s_end = s.end_time if isinstance(s.end_time, datetime) else _parse_datetime(s.end_time)
+        overlap_minutes, overlap_type = _calculate_overlap(start_dt, end_dt, s_start, s_end)
+        total_overlap += overlap_minutes
+        affected_start = min(affected_start, s_start)
+        affected_end = max(affected_end, s_end)
+        
+        conflict_details_list.append(ConflictDetail(
+            schedule_id=s.id,
+            title=s.title,
+            start_time=s_start.isoformat(),
+            end_time=s_end.isoformat(),
+            priority=s.priority,
+            overlap_minutes=overlap_minutes,
+            overlap_type=overlap_type
+        ))
+    
+    conflict_dicts = [_schedule_to_dict(s) for s in conflicts]
+    conflict_titles = "、".join([s['title'] for s in conflict_dicts])
+    
+    severity = "high" if total_overlap >= 60 or len(conflicts) >= 2 else "medium"
+    
+    suggestions = _generate_local_suggestions(
+        start_dt, end_dt, conflicts, duration,
+        data.__dict__.get('priority', 'medium') if hasattr(data, 'priority') else 'medium',
+        data.__dict__.get('title', '日程') if hasattr(data, 'title') else '日程'
+    )
+    
+    if duration >= 30:
+        try:
+            target_date = start_dt
+            ai_suggestions = await _generate_reschedule_options(
+                db=db,
+                title=data.__dict__.get('title', '日程') if hasattr(data, 'title') else '日程',
+                preferred_start=start_dt,
+                duration_minutes=duration,
+                priority=data.__dict__.get('priority', 'medium') if hasattr(data, 'priority') else 'medium',
+                category=data.__dict__.get('category', '工作') if hasattr(data, 'category') else '工作',
+                target_date=target_date,
+                max_options=2,
+                exclude_id=data.exclude_id
+            )
+            
+            for i, opt in enumerate(ai_suggestions):
+                suggestions.append(TimeAdjustmentSuggestion(
+                    suggestion_id=f"ai_suggestion_{i}",
+                    title=opt.title,
+                    start_time=opt.start_time,
+                    end_time=opt.end_time,
+                    duration_minutes=opt.duration_minutes,
+                    adjustment_type="move_earlier" if opt.start_time < start_dt.isoformat() else "move_later",
+                    reason=opt.reason,
+                    score=opt.score
+                ))
+        except Exception as e:
+            print(f"Failed to generate AI suggestions: {e}")
+    
+    suggestions.sort(key=lambda x: x.score, reverse=True)
     
     return ConflictInfo(
         has_conflict=True,
-        conflicting_schedules=conflict_details,
-        message=f"该时间段与以下日程冲突：{conflict_titles}"
+        conflicting_schedules=conflict_dicts,
+        message=f"该时间段与以下日程冲突：{conflict_titles}",
+        conflict_details=conflict_details_list,
+        affected_time_range={
+            "start": affected_start.isoformat(),
+            "end": affected_end.isoformat(),
+            "total_overlap_minutes": total_overlap
+        },
+        suggestions=suggestions[:5],
+        severity=severity
     )
 
 @router.post("/reschedule-options")

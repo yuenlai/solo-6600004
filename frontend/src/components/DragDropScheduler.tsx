@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useScheduleStore } from '../store/schedule';
 import { Schedule, DragState, ResizeState, CreateDragState, ConflictInfo } from '../types';
-import { scheduleApi } from '../services/api';
 import { RescheduleAssistant } from './RescheduleAssistant';
+import { ScheduleEditor } from './ScheduleEditor';
 
 const START_HOUR = 7;
 const END_HOUR = 23;
@@ -142,7 +142,7 @@ const ScheduleBlock: React.FC<ScheduleBlockProps> = ({
 };
 
 export const DragDropScheduler: React.FC = () => {
-  const { schedules, selectedDate, conflicts, checkScheduleConflict, updateScheduleTime, addSchedule, clearConflicts } = useScheduleStore();
+  const { schedules, selectedDate, conflicts, checkScheduleConflict, updateScheduleTime, clearConflicts } = useScheduleStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
@@ -170,8 +170,12 @@ export const DragDropScheduler: React.FC = () => {
     endTime: null,
   });
   const [previewConflict, setPreviewConflict] = useState<ConflictInfo | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState<{ startTime: string; endTime: string } | null>(null);
-  const [newScheduleTitle, setNewScheduleTitle] = useState('');
+  const [showScheduleEditor, setShowScheduleEditor] = useState<{ 
+    mode: 'create' | 'edit'; 
+    startTime?: string; 
+    endTime?: string;
+    schedule?: Schedule;
+  } | null>(null);
   const [showRescheduleFor, setShowRescheduleFor] = useState<Schedule | null>(null);
 
   const daySchedules = useMemo(() => {
@@ -388,11 +392,11 @@ export const DragDropScheduler: React.FC = () => {
     } else if (createState.isCreating && createState.startTime && createState.endTime) {
       const duration = getDurationMinutes(createState.startTime, createState.endTime);
       if (duration >= 15) {
-        setShowCreateModal({
+        setShowScheduleEditor({
+          mode: 'create',
           startTime: createState.startTime,
           endTime: createState.endTime,
         });
-        setNewScheduleTitle('');
       }
     }
     setDragState({
@@ -435,32 +439,6 @@ export const DragDropScheduler: React.FC = () => {
   useEffect(() => {
     clearConflicts();
   }, [selectedDate, clearConflicts]);
-
-  const handleCreateSchedule = async () => {
-    if (!showCreateModal || !newScheduleTitle.trim()) return;
-    try {
-      const res = await scheduleApi.create({
-        title: newScheduleTitle,
-        description: '',
-        priority: 'medium',
-        category: '工作',
-        start_time: showCreateModal.startTime,
-        end_time: showCreateModal.endTime,
-      });
-      const s = res.data;
-      addSchedule({
-        id: s.id, title: s.title, description: s.description, priority: s.priority,
-        category: s.category, completed: s.completed,
-        startTime: s.start_time, endTime: s.end_time,
-        recurring: s.recurring,
-      });
-      setShowCreateModal(null);
-      setNewScheduleTitle('');
-    } catch (e) {
-      console.error('Failed to create schedule:', e);
-      alert('创建日程失败，请稍后重试');
-    }
-  };
 
   const formatTimeDisplay = (iso: string) => {
     return iso.split('T')[1]?.substring(0, 5) || '';
@@ -706,76 +684,15 @@ export const DragDropScheduler: React.FC = () => {
         <span>⚡ 15分钟吸附对齐</span>
       </div>
 
-      {showCreateModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => setShowCreateModal(null)}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '12px',
-            width: '400px',
-            maxWidth: '90vw',
-            padding: '24px',
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '18px' }}>➕ 新建日程</h3>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
-                时间：{formatTimeDisplay(showCreateModal.startTime)} - {formatTimeDisplay(showCreateModal.endTime)}
-                ({getDurationMinutes(showCreateModal.startTime, showCreateModal.endTime)}分钟
-              </div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#333' }}>
-                日程标题
-              </label>
-              <input
-                autoFocus
-                value={newScheduleTitle}
-                onChange={e => setNewScheduleTitle(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreateSchedule()}
-                placeholder="请输入日程标题"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => setShowCreateModal(null)}
-                style={{
-                  flex: 1,
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  border: '1px solid #ddd',
-                  background: '#fff',
-                  color: '#666',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >取消</button>
-              <button
-                onClick={handleCreateSchedule}
-                disabled={!newScheduleTitle.trim()}
-                style={{
-                  flex: 1,
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: '#1a237e',
-                  color: '#fff',
-                  cursor: newScheduleTitle.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  opacity: newScheduleTitle.trim() ? 1 : 0.6,
-                }}
-              >确认创建</button>
-            </div>
-          </div>
-        </div>
+      {showScheduleEditor && (
+        <ScheduleEditor
+          mode={showScheduleEditor.mode}
+          initialSchedule={showScheduleEditor.schedule}
+          defaultStartTime={showScheduleEditor.startTime}
+          defaultEndTime={showScheduleEditor.endTime}
+          onClose={() => setShowScheduleEditor(null)}
+          onSaved={() => setShowScheduleEditor(null)}
+        />
       )}
 
       {showRescheduleFor && (

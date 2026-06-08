@@ -87,7 +87,7 @@ interface ScheduleState {
   deleteSchedule: (id: string) => void;
   toggleComplete: (id: string) => void;
   updateScheduleTime: (id: string, startTime: string, endTime: string) => Promise<boolean>;
-  checkScheduleConflict: (startTime: string, endTime: string, excludeId?: string) => Promise<ConflictInfo | null>;
+  checkScheduleConflict: (startTime: string, endTime: string, excludeId?: string, extra?: { title?: string; priority?: string; category?: string }) => Promise<ConflictInfo | null>;
   setScheduleViewMode: (mode: 'list' | 'timeline') => void;
   clearConflicts: () => void;
   setConflict: (scheduleId: string, info: ConflictInfo) => void;
@@ -489,31 +489,54 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     newConflicts.set(scheduleId, info);
     set({ conflicts: newConflicts });
   },
-  checkScheduleConflict: async (startTime, endTime, excludeId) => {
+  checkScheduleConflict: async (startTime, endTime, excludeId, extra) => {
     try {
-      const res = await scheduleApi.checkConflict(startTime, endTime, excludeId);
-      if (res.data.has_conflict) {
-        const conflictingSchedules = res.data.conflicting_schedules.map((cs: any) => ({
-          id: cs.id,
-          title: cs.title,
-          description: cs.description,
-          startTime: cs.start_time,
-          endTime: cs.end_time,
-          priority: cs.priority,
-          category: cs.category,
-          completed: cs.completed,
-          recurring: cs.recurring
-        }));
-        return {
-          hasConflict: true,
-          conflictingSchedules,
-          message: res.data.message
-        };
-      }
+      const res = await scheduleApi.checkConflict(startTime, endTime, excludeId, extra);
+      const conflictingSchedules = res.data.conflicting_schedules.map((cs: any) => ({
+        id: cs.id,
+        title: cs.title,
+        description: cs.description,
+        startTime: cs.start_time,
+        endTime: cs.end_time,
+        priority: cs.priority,
+        category: cs.category,
+        completed: cs.completed,
+        recurring: cs.recurring
+      }));
+      
+      const conflictDetails = res.data.conflict_details?.map((cd: any) => ({
+        scheduleId: cd.schedule_id,
+        title: cd.title,
+        startTime: cd.start_time,
+        endTime: cd.end_time,
+        priority: cd.priority,
+        overlapMinutes: cd.overlap_minutes,
+        overlapType: cd.overlap_type
+      }));
+      
+      const suggestions = res.data.suggestions?.map((s: any) => ({
+        suggestionId: s.suggestion_id,
+        title: s.title,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        durationMinutes: s.duration_minutes,
+        adjustmentType: s.adjustment_type,
+        reason: s.reason,
+        score: s.score
+      }));
+      
       return {
-        hasConflict: false,
-        conflictingSchedules: [],
-        message: '该时间段无冲突'
+        hasConflict: res.data.has_conflict,
+        conflictingSchedules,
+        message: res.data.message,
+        conflictDetails,
+        affectedTimeRange: res.data.affected_time_range ? {
+          start: res.data.affected_time_range.start,
+          end: res.data.affected_time_range.end,
+          totalOverlapMinutes: res.data.affected_time_range.total_overlap_minutes
+        } : undefined,
+        suggestions,
+        severity: res.data.severity
       };
     } catch (e) {
       console.error('Conflict check failed:', e);

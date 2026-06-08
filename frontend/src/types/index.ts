@@ -59,10 +59,39 @@ export interface RescheduleOption {
   originalSchedule?: Schedule;
 }
 
+export interface ConflictDetail {
+  scheduleId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  priority: 'low' | 'medium' | 'high';
+  overlapMinutes: number;
+  overlapType: 'full' | 'partial_start' | 'partial_end' | 'contains';
+}
+
+export interface TimeAdjustmentSuggestion {
+  suggestionId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  adjustmentType: 'move_earlier' | 'move_later' | 'shorten' | 'split' | 'swap';
+  reason: string;
+  score: number;
+}
+
 export interface ConflictInfo {
   hasConflict: boolean;
   conflictingSchedules: Schedule[];
   message: string;
+  conflictDetails?: ConflictDetail[];
+  affectedTimeRange?: {
+    start: string;
+    end: string;
+    totalOverlapMinutes: number;
+  };
+  suggestions?: TimeAdjustmentSuggestion[];
+  severity?: 'low' | 'medium' | 'high';
 }
 
 export interface RescheduleOptionsResponse {
