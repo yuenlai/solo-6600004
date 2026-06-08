@@ -240,7 +240,7 @@ export const HabitTracker: React.FC = () => {
                     )}
                   </div>
                   <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
-                    🔥 连续 {h.currentStreak} 天 | 目标: {h.target}{h.unit}
+                    🔥 连续 {stats?.currentStreak ?? h.currentStreak} 天 | 目标: {h.target}{h.unit}
                     {stats && (
                       <span style={{ marginLeft: '8px' }}>
                         | 📊 总完成 {stats.totalCompleted} 天 | 完成率 {stats.completionRate}%

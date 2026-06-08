@@ -132,6 +132,13 @@ async def list_habits(db: AsyncSession = Depends(get_db)):
 
 @router.post("")
 async def create_habit(data: HabitCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(
+        select(Habit).where(Habit.name == data.name)
+    )
+    existing_habit = existing.scalar_one_or_none()
+    if existing_habit:
+        raise HTTPException(status_code=400, detail=f"已存在同名习惯: {data.name}")
+    
     h = Habit(id=str(uuid.uuid4()), **data.model_dump())
     db.add(h); await db.commit(); await db.refresh(h)
     return h
@@ -222,9 +229,10 @@ async def get_habit_stats(hid: str, db: AsyncSession = Depends(get_db)):
     current_streak = calculate_current_streak(unique_dates)
     
     today = datetime.now().date()
-    first_date = sorted(unique_dates)[-1] if unique_dates else today
+    sorted_dates = sorted(unique_dates)
+    first_date = sorted_dates[0] if unique_dates else today
     total_days = (today - first_date).days + 1
-    completion_rate = round((total_completed / total_days) * 100, 1) if total_days > 0 else 0
+    completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
     
     this_month_start = datetime(today.year, today.month, 1).date()
     this_month_completed = sum(
@@ -238,7 +246,7 @@ async def get_habit_stats(hid: str, db: AsyncSession = Depends(get_db)):
         d = format_date(today - timedelta(days=i))
         last_7_days.append({"date": d, "completed": d in unique_date_strs})
     
-    first_record_date = format_date(sorted(unique_dates)[-1]) if unique_dates else None
+    first_record_date = format_date(sorted_dates[0]) if unique_dates else None
     
     return {
         "habitId": hid,

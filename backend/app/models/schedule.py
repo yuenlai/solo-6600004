@@ -9,7 +9,7 @@ class Priority(str, enum.Enum):
 class Habit(Base):
     __tablename__ = "habits"
     id = Column(String, primary_key=True)
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)
     icon = Column(String(10), default="🎯")
     color = Column(String(20), default="#4caf50")
     target = Column(String(10), default="1")

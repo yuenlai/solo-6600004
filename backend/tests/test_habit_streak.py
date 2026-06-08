@@ -539,5 +539,267 @@ class TestCrossDayScenarios(unittest.TestCase):
             self.assertEqual(current, 2)
 
 
+class TestCompletionRateAndTrackingDays(unittest.TestCase):
+    
+    def test_completion_rate_never_exceeds_100_percent(self):
+        records = []
+        dates = ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = True
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        mock_today = datetime(2026, 6, 5, 23, 0, 0)
+        with patch('app.api.habits.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_today
+            mock_dt.strptime = datetime.strptime
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            
+            first_date = sorted_dates[0] if unique_dates else mock_today.date()
+            total_days = (mock_today.date() - first_date).days + 1
+            total_completed = len(unique_dates)
+            completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
+            
+            self.assertEqual(total_days, 5)
+            self.assertEqual(total_completed, 5)
+            self.assertEqual(completion_rate, 100.0)
+    
+    def test_first_date_calculation_is_correct(self):
+        records = []
+        dates = ["2026-06-10", "2026-06-01", "2026-06-05", "2026-06-15"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = True
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        self.assertEqual(sorted_dates[0].strftime("%Y-%m-%d"), "2026-06-01")
+        self.assertEqual(sorted_dates[-1].strftime("%Y-%m-%d"), "2026-06-15")
+    
+    def test_total_days_tracked_calculation(self):
+        records = []
+        dates = ["2026-06-01", "2026-06-03", "2026-06-05"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = True
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        mock_today = datetime(2026, 6, 10, 12, 0, 0)
+        with patch('app.api.habits.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_today
+            mock_dt.strptime = datetime.strptime
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            
+            first_date = sorted_dates[0] if unique_dates else mock_today.date()
+            total_days = (mock_today.date() - first_date).days + 1
+            total_completed = len(unique_dates)
+            completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
+            
+            self.assertEqual(first_date.strftime("%Y-%m-%d"), "2026-06-01")
+            self.assertEqual(total_days, 10)
+            self.assertEqual(total_completed, 3)
+            self.assertEqual(completion_rate, 30.0)
+    
+    def test_completion_rate_with_gaps(self):
+        records = []
+        dates = ["2026-06-01", "2026-06-02", "2026-06-05", "2026-06-06", "2026-06-07"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = True
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        mock_today = datetime(2026, 6, 7, 23, 0, 0)
+        with patch('app.api.habits.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_today
+            mock_dt.strptime = datetime.strptime
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            
+            first_date = sorted_dates[0] if unique_dates else mock_today.date()
+            total_days = (mock_today.date() - first_date).days + 1
+            total_completed = len(unique_dates)
+            completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
+            
+            self.assertEqual(total_days, 7)
+            self.assertEqual(total_completed, 5)
+            self.assertAlmostEqual(completion_rate, 71.4, places=1)
+    
+    def test_empty_records_stats(self):
+        unique_dates = get_unique_completed_dates([])
+        mock_today = datetime(2026, 6, 10, 12, 0, 0)
+        
+        with patch('app.api.habits.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_today
+            mock_dt.strptime = datetime.strptime
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            
+            first_date = sorted(unique_dates)[0] if unique_dates else mock_today.date()
+            total_days = (mock_today.date() - first_date).days + 1
+            total_completed = len(unique_dates)
+            completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
+            
+            self.assertEqual(total_days, 1)
+            self.assertEqual(total_completed, 0)
+            self.assertEqual(completion_rate, 0)
+    
+    def test_first_record_date_matches_first_date(self):
+        records = []
+        dates = ["2026-06-05", "2026-06-06", "2026-06-01", "2026-06-10"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = True
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        first_date = sorted_dates[0] if unique_dates else None
+        first_record_date = sorted_dates[0].strftime("%Y-%m-%d") if unique_dates else None
+        
+        self.assertEqual(first_record_date, "2026-06-01")
+        self.assertEqual(first_date.strftime("%Y-%m-%d"), "2026-06-01")
+
+
+class TestDuplicateHabitName(unittest.IsolatedAsyncioTestCase):
+    
+    async def test_create_duplicate_habit_name_raises_error(self):
+        from app.api.habits import create_habit, HabitCreate
+        from app.models.schedule import Habit
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from unittest.mock import AsyncMock, MagicMock
+        
+        mock_existing_habit = Habit()
+        mock_existing_habit.id = "existing-id"
+        mock_existing_habit.name = "每日阅读"
+        mock_existing_habit.icon = "📚"
+        mock_existing_habit.color = "#4caf50"
+        mock_existing_habit.target = "30"
+        mock_existing_habit.unit = "分钟"
+        mock_existing_habit.reminder = ""
+        
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_existing_habit
+        mock_db.execute.return_value = mock_result
+        
+        habit_data = HabitCreate(
+            name="每日阅读",
+            icon="📚",
+            color="#4caf50",
+            target="30",
+            unit="分钟"
+        )
+        
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as context:
+            await create_habit(habit_data, mock_db)
+        
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("已存在同名习惯", context.exception.detail)
+    
+    async def test_create_new_habit_succeeds(self):
+        from app.api.habits import create_habit, HabitCreate
+        from app.models.schedule import Habit
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from unittest.mock import AsyncMock, MagicMock
+        
+        mock_db = AsyncMock(spec=AsyncSession)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        
+        async def mock_commit():
+            pass
+        
+        async def mock_refresh(obj):
+            obj.id = "new-habit-id"
+            return obj
+        
+        mock_db.commit = mock_commit
+        mock_db.refresh = mock_refresh
+        
+        habit_data = HabitCreate(
+            name="新习惯",
+            icon="🎯",
+            color="#2196f3",
+            target="1",
+            unit="次"
+        )
+        
+        result = await create_habit(habit_data, mock_db)
+        
+        self.assertEqual(result.name, "新习惯")
+        self.assertEqual(result.id, "new-habit-id")
+
+
+class TestStatsConsistency(unittest.TestCase):
+    
+    def test_all_stats_use_same_unique_dates(self):
+        records = []
+        dates = ["2026-06-01", "2026-06-02", "2026-06-02", "2026-06-03", "2026-06-03", "2026-06-05"]
+        for i, date_str in enumerate(dates):
+            r = HabitRecord()
+            r.id = f"rec_{i}"
+            r.habit_id = "test"
+            r.date = date_str
+            r.value = "1"
+            r.completed = i != 3
+            records.append(r)
+        
+        unique_dates = get_unique_completed_dates(records)
+        sorted_dates = sorted(unique_dates)
+        
+        mock_today = datetime(2026, 6, 8, 12, 0, 0)
+        with patch('app.api.habits.datetime') as mock_dt:
+            mock_dt.now.return_value = mock_today
+            mock_dt.strptime = datetime.strptime
+            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            
+            total_completed = len(unique_dates)
+            current_streak = calculate_current_streak(unique_dates)
+            longest_streak = calculate_longest_streak(unique_dates)
+            
+            first_date = sorted_dates[0] if unique_dates else mock_today.date()
+            total_days = (mock_today.date() - first_date).days + 1
+            completion_rate = round(min(100, (total_completed / total_days) * 100), 1) if total_days > 0 else 0
+            
+            self.assertEqual(total_completed, 4)
+            self.assertEqual(total_days, 8)
+            self.assertAlmostEqual(completion_rate, 50.0, places=1)
+            self.assertEqual(current_streak, 0)
+            self.assertEqual(longest_streak, 3)
+            self.assertEqual(sorted_dates[0].strftime("%Y-%m-%d"), "2026-06-01")
+
+
 if __name__ == "__main__":
     unittest.main()

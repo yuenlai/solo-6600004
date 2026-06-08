@@ -107,12 +107,13 @@ export const calculateCompletionRate = (records: HabitRecord[]): number => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  const firstDate = parseDate(uniqueDates[0]);
+  const sortedDates = [...uniqueDates].sort();
+  const firstDate = parseDate(sortedDates[0]);
   const totalDays = Math.floor(
     (today.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)
   ) + 1;
   
   return totalDays > 0 
-    ? Math.round((uniqueDates.length / totalDays) * 1000) / 10 
+    ? Math.min(100, Math.round((uniqueDates.length / totalDays) * 1000) / 10)
     : 0;
 };
