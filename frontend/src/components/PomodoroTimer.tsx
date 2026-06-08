@@ -75,26 +75,38 @@ export const PomodoroTimer: React.FC = () => {
       setIsLoading(true);
       try {
         const activeSession = await loadActiveFocusSession();
+        const backupStr = localStorage.getItem(STORAGE_KEY);
+
         if (activeSession) {
-          const backupStr = localStorage.getItem(STORAGE_KEY);
           let finalAccumulated = activeSession.accumulatedSeconds;
+          let useBackup = false;
 
           if (backupStr) {
             try {
               const backup: LocalBackup = JSON.parse(backupStr);
-              if (backup.sessionId === activeSession.id && !activeSession.isPaused) {
-                const elapsedMs = Date.now() - backup.lastTick;
-                const elapsedSecs = Math.floor(elapsedMs / 1000);
-                if (elapsedSecs > 0 && elapsedSecs < 3600) {
-                  finalAccumulated = Math.min(
-                    activeSession.duration * 60,
-                    backup.accumulatedSeconds + elapsedSecs
-                  );
+              if (backup.sessionId === activeSession.id) {
+                useBackup = true;
+                if (!activeSession.isPaused) {
+                  const elapsedMs = Date.now() - backup.lastTick;
+                  const elapsedSecs = Math.floor(elapsedMs / 1000);
+                  if (elapsedSecs > 0 && elapsedSecs < 3600) {
+                    finalAccumulated = Math.min(
+                      activeSession.duration * 60,
+                      backup.accumulatedSeconds + elapsedSecs
+                    );
+                  }
                 }
+              } else {
+                clearLocalBackup();
               }
             } catch (e) {
               console.warn('Failed to parse local backup:', e);
+              clearLocalBackup();
             }
+          }
+
+          if (!useBackup && activeSession.isPaused) {
+            finalAccumulated = activeSession.accumulatedSeconds;
           }
 
           accumulatedRef.current = finalAccumulated;
@@ -112,13 +124,19 @@ export const PomodoroTimer: React.FC = () => {
             startTimer();
           }
         } else {
-          clearLocalBackup();
+          if (backupStr) {
+            clearLocalBackup();
+          }
           setTimeLeft(25 * 60);
           setIsPaused(false);
           accumulatedRef.current = 0;
         }
       } catch (e) {
         console.error('Failed to init session:', e);
+        clearLocalBackup();
+        setTimeLeft(25 * 60);
+        setIsPaused(false);
+        accumulatedRef.current = 0;
       } finally {
         setIsLoading(false);
       }

@@ -89,12 +89,19 @@ async def create_focus_session(data: FocusSessionCreate, db: AsyncSession = Depe
 async def get_active_focus_session(db: AsyncSession = Depends(get_db)):
     q = select(FocusSession).where(
         FocusSession.completed == False,
-        FocusSession.interrupted == False
+        FocusSession.interrupted == False,
+        FocusSession.end_time == None
     ).order_by(FocusSession.start_time.desc()).limit(1)
     result = await db.execute(q)
     s = result.scalar_one_or_none()
     if not s:
         return None
+    
+    start_dt = s.start_time if isinstance(s.start_time, datetime) else datetime.fromisoformat(s.start_time)
+    max_allowed_duration = (s.duration if isinstance(s.duration, int) else int(s.duration)) * 60 + 86400
+    if (datetime.now() - start_dt).total_seconds() > max_allowed_duration:
+        return None
+    
     return _focus_session_to_dict(s)
 
 @router.post("/{fsid}/pause")
