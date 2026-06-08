@@ -48,6 +48,10 @@ export const habitApi = {
   list: () => api.get('/habits'),
   create: (data: any) => api.post('/habits', data),
   record: (id: string, data: any) => api.post(`/habits/${id}/record`, data),
+  getRecords: (id: string, startDate?: string, endDate?: string) => 
+    api.get(`/habits/${id}/records`, { params: { start_date: startDate, end_date: endDate } }),
+  deleteRecord: (id: string, date: string) => api.delete(`/habits/${id}/record/${date}`),
+  getStats: (id: string) => api.get(`/habits/${id}/stats`),
   delete: (id: string) => api.delete(`/habits/${id}`),
 };
 export const reportApi = {

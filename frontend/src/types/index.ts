@@ -30,6 +30,18 @@ export interface HabitRecord {
   date: string; completed: boolean; value: number;
 }
 
+export interface HabitStats {
+  habitId: string;
+  totalCompleted: number;
+  currentStreak: number;
+  longestStreak: number;
+  completionRate: number;
+  thisMonthCompleted: number;
+  last7Days: { date: string; completed: boolean }[];
+  firstRecordDate: string | null;
+  totalDaysTracked: number;
+}
+
 export interface FocusSession {
   id: string; duration: number; startTime: string;
   endTime?: string; scheduleId?: string; completed: boolean;

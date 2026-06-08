@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { Schedule, Habit, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation, ScheduleFilter, GroupBy } from '../types';
+import { Schedule, Habit, HabitStats, FocusSession, HabitChallenge, MorningPlan, EveningReview, CompletionStats, InterruptionStatistics, ConflictInfo, MonthlyGoal, MonthlyGoalWithDetails, MonthlyGoalProgress, WeeklyAction, DailyAction, ExceptionDay, ExceptionDayWithDetails, ExceptionDayRule, MultiDayViewData, CrossDaySchedule, FreeTimeSlot, DaySummary, ScheduleShare, WarningCenterData, ScheduleWarning, HabitWarning, LongPendingWarning, WarningLevel, MicroTask, FragmentRecommendation, ScheduleFilter, GroupBy } from '../types';
 import { scheduleApi, challengeApi, habitApi, dailyPlanApi, focusSessionApi, monthlyGoalApi, exceptionDayApi, shareApi, fragmentTimeApi } from '../services/api';
 import { getWeekStartDate, addDays, formatDate } from '../data/weekTemplates';
 
 interface ScheduleState {
   schedules: Schedule[];
   habits: Habit[];
+  habitStats: Map<string, HabitStats>;
   challenges: HabitChallenge[];
   focusSession: FocusSession | null;
   focusSessions: FocusSession[];
@@ -93,7 +94,11 @@ interface ScheduleState {
   clearConflicts: () => void;
   setConflict: (scheduleId: string, info: ConflictInfo) => void;
   addHabit: (h: Habit) => void;
-  recordHabit: (habitId: string, date: string, value: number) => void;
+  recordHabit: (habitId: string, date: string, value: number) => Promise<void>;
+  loadHabitRecords: (habitId: string) => Promise<void>;
+  deleteHabitRecord: (habitId: string, date: string) => Promise<void>;
+  loadHabitStats: (habitId: string) => Promise<HabitStats | null>;
+  loadAllHabitStats: () => Promise<void>;
   startFocus: (duration: number, scheduleId?: string) => Promise<void>;
   completeFocus: () => Promise<void>;
   interruptFocus: () => Promise<void>;
@@ -170,7 +175,7 @@ interface ScheduleState {
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
-  schedules: [], habits: [], challenges: [], focusSession: null,
+  schedules: [], habits: [], habitStats: new Map(), challenges: [], focusSession: null,
   focusSessions: [],
   interruptionStatistics: null,
   selectedDate: new Date().toISOString().split('T')[0],
@@ -682,12 +687,85 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
   addHabit: (h) => set({ habits: [...get().habits, h] }),
-  recordHabit: (habitId, date, value) => set({
-    habits: get().habits.map(h => h.id === habitId ? {
-      ...h, history: [...h.history, { date, completed: value >= h.target, value }],
-      currentStreak: h.currentStreak + 1
-    } : h)
-  }),
+  recordHabit: async (habitId, date, value) => {
+    try {
+      const res = await habitApi.record(habitId, { date, value: value.toString() });
+      const { streak } = res.data;
+      
+      set({
+        habits: get().habits.map(h => {
+          if (h.id !== habitId) return h;
+          const existingRecord = h.history.find(r => r.date === date);
+          let newHistory;
+          if (existingRecord) {
+            newHistory = h.history.map(r => r.date === date ? { ...r, completed: value >= h.target, value } : r);
+          } else {
+            newHistory = [...h.history, { date, completed: value >= h.target, value }];
+          }
+          return { ...h, history: newHistory, currentStreak: parseInt(streak) };
+        })
+      });
+      
+      await get().loadHabitStats(habitId);
+    } catch (e) {
+      console.error('Failed to record habit:', e);
+      throw e;
+    }
+  },
+  loadHabitRecords: async (habitId) => {
+    try {
+      const res = await habitApi.getRecords(habitId);
+      const records = res.data.map((r: any) => ({
+        date: r.date,
+        completed: r.completed,
+        value: parseInt(r.value)
+      }));
+      
+      set({
+        habits: get().habits.map(h => h.id === habitId ? { ...h, history: records } : h)
+      });
+    } catch (e) {
+      console.error('Failed to load habit records:', e);
+    }
+  },
+  deleteHabitRecord: async (habitId, date) => {
+    try {
+      const res = await habitApi.deleteRecord(habitId, date);
+      const { streak } = res.data;
+      
+      set({
+        habits: get().habits.map(h => h.id === habitId ? {
+          ...h,
+          history: h.history.filter(r => r.date !== date),
+          currentStreak: parseInt(streak)
+        } : h)
+      });
+      
+      await get().loadHabitStats(habitId);
+    } catch (e) {
+      console.error('Failed to delete habit record:', e);
+      throw e;
+    }
+  },
+  loadHabitStats: async (habitId) => {
+    try {
+      const res = await habitApi.getStats(habitId);
+      const stats: HabitStats = res.data;
+      const newStats = new Map(get().habitStats);
+      newStats.set(habitId, stats);
+      set({ habitStats: newStats });
+      return stats;
+    } catch (e) {
+      console.error('Failed to load habit stats:', e);
+      return null;
+    }
+  },
+  loadAllHabitStats: async () => {
+    const { habits } = get();
+    for (const habit of habits) {
+      await get().loadHabitStats(habit.id);
+    }
+  },
   startFocus: async (duration, scheduleId) => {
     try {
       const startTime = new Date().toISOString();
@@ -985,6 +1063,11 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         reminder: h.reminder
       }));
       set({ habits });
+      
+      for (const habit of habits) {
+        await get().loadHabitRecords(habit.id);
+        await get().loadHabitStats(habit.id);
+      }
     } catch (e) {
       console.error('Failed to load habits:', e);
     } finally {
