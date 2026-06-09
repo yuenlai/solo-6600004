@@ -78,6 +78,14 @@ export const PomodoroTimer: React.FC = () => {
         const backupStr = localStorage.getItem(STORAGE_KEY);
 
         if (activeSession) {
+          if (activeSession.completed || activeSession.interrupted || activeSession.endTime) {
+            clearLocalBackup();
+            setTimeLeft(25 * 60);
+            setIsPaused(false);
+            accumulatedRef.current = 0;
+            return;
+          }
+
           let finalAccumulated = activeSession.accumulatedSeconds;
           let useBackup = false;
 

@@ -97,6 +97,9 @@ async def get_active_focus_session(db: AsyncSession = Depends(get_db)):
     if not s:
         return None
     
+    if s.completed or s.interrupted or s.end_time is not None:
+        return None
+    
     start_dt = s.start_time if isinstance(s.start_time, datetime) else datetime.fromisoformat(s.start_time)
     max_allowed_duration = (s.duration if isinstance(s.duration, int) else int(s.duration)) * 60 + 86400
     if (datetime.now() - start_dt).total_seconds() > max_allowed_duration:

@@ -895,6 +895,12 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         set({ focusSession: null });
         return null;
       }
+      
+      if (res.data.completed || res.data.interrupted || res.data.end_time) {
+        set({ focusSession: null });
+        return null;
+      }
+      
       const session: FocusSession = {
         id: res.data.id,
         duration: res.data.duration,
